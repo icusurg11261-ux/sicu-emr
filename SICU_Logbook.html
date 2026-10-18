@@ -40,7 +40,7 @@
                 <button class="btn btn-outline-danger btn-sm ms-1" onclick="signOut()">ออกจากระบบ</button>
             </div>
         </div>
-        <div class="filter-box">
+        <div class="filter-box" style="flex-wrap: nowrap; gap: 10px; overflow-x: auto;">
             <div class="d-flex align-items-center gap-2 border-end pe-3">
                 <label class="text-secondary mb-0" style="white-space: nowrap;">ตั้งแต่เดือน:</label>
                 <input type="month" class="form-control form-control-sm" id="filterMonthStart" onchange="clearFY(); applyFilters()">
@@ -75,20 +75,39 @@
     <!-- Data Table -->
     <div class="table-wrapper">
         <div class="table-responsive">
+            <style>
+                /* บังคับให้ตัวอักษรทุกช่องในตารางมีขนาดและระยะบรรทัดเท่ากันทั้งหมด */
+                #logbookTable tbody td,
+                #logbookTable tbody td small,
+                #logbookTable tbody td .info-box,
+                #logbookTable tbody td span:not(.badge) {
+                    font-size: 0.75rem !important;
+                    line-height: 1.3 !important;
+                }
+                /* ลดขนาดตัวอักษรและระยะบรรทัดเฉพาะช่องที่อยู่ (คอลัมน์สุดท้าย) */
+                #logbookTable tbody td:last-child,
+                #logbookTable tbody td:last-child small {
+                    font-size: 0.72rem !important;
+                    line-height: 1.3 !important;
+                }
+                /* ขนาดตัวอักษรหัวตาราง */
+                #logbookTable thead th {
+                    font-size: 0.84rem !important;
+                }
+            </style>
             <table class="table align-middle" id="logbookTable">
                 <thead>
                     <tr>
-                        <th width="3%">NO</th>
+                        <th width="5%">NO</th>
                         <th width="9%">HN<br>คำนำหน้า-สกุล<br>อายุ</th>
-                        <th width="13%">กลุ่มโรค<br>สาเหตุเข้า ICU<br>APACHE/TRISS</th>
+                        <th width="12%">กลุ่มโรค<br>สาเหตุเข้า ICU<br>APACHE/TRISS</th>
                         <th width="9%">เข้า ICU<br>ออก ICU<br>LOS</th>
-                        <th width="11%">ประเภทรับเข้า<br>ประเภทจำหน่าย</th>
-                        <th width="12%">จำนวนวันอุปกรณ์<br><small>(ETT, Vent, Cath, IV, C-Line)</small></th>
-                        <th width="11%">การวินิจฉัยโรค</th>
-                        <th width="10%">การผ่าตัด</th>
-                        <th width="8%">แพทย์</th>
+                        <th width="10%">ประเภทรับเข้า<br>ประเภทจำหน่าย</th>
+                        <th width="11%">จำนวนวันอุปกรณ์<br><small>(ETT, Vent, Cath, IV, C-Line)</small></th>
+                        <th width="12%">การวินิจฉัยโรค</th>
+                        <th width="18%">การผ่าตัด</th>
+                        <th width="6%">แพทย์</th>
                         <th width="8%">ที่อยู่</th>
-                        <th width="6%">จัดการ</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody">
@@ -332,8 +351,8 @@
             }
 
             const dateInfo = `
-                เข้า: <span class="fw-bold text-success">${formatDateThai(p.icu_in_date)}</span><br>
-                ออก: <span class="fw-bold">${formatDateThai(p.discharge_date)}</span><br>
+                เข้า: <span class="text-success">${formatDateThai(p.icu_in_date)}</span><br>
+                ออก: <span>${formatDateThai(p.discharge_date)}</span><br>
                 <div class="mt-1">
                     <span class="text-primary-custom d-inline-block">LOS รวม: ${losData.total} วัน</span>
                     ${(hasDateFilter && losData.total !== losData.filtered) ? `<br><span class="text-danger fw-bold" style="font-size:0.75rem;">(เฉพาะเดือนนี้: ${losData.filtered} วัน)</span>` : ''}
@@ -385,24 +404,22 @@
                 }).join('<br>');
             }
 
-            const actionInfo = `
-                <button class="btn btn-sm btn-outline-danger w-100" onclick="deletePatient('${p.hn}')">🗑️ ลบ</button>
-            `;
-
             const row = `<tr>
-                <td class="text-center">${index + 1}</td>
-                <td>${patientInfo}</td>
-                <td>${clinicalInfo}</td>
-                <td>${dateInfo}</td>
-                <td>${moveInfo}</td>
-                <td>${deviceInfo}</td>
-                <td>${p.primary_diagnosis || '-'}</td>
-                <td>${surgeryDisplay}</td>
-                <td><span class="fw-bold">${p.doctor_owner || '-'}</span><br><small class="text-muted">${p.doctor_support || ''}</small></td>
-                <td><small class="text-muted">${p.address || '-'}</small></td>
-                <td>${actionInfo}</td>
-            </tr>`;
-            tbody.insertAdjacentHTML('beforeend', row);
+            <td class="text-center align-top">
+                <div class="fw-bold mb-1">${index + 1}</div>
+                <button class="btn btn-sm btn-outline-danger px-1 py-0" style="font-size: 0.75rem;" onclick="deletePatient('${p.hn}')" title="ลบข้อมูล">🗑️</button>
+            </td>
+            <td>${patientInfo}</td>
+            <td>${clinicalInfo}</td>
+            <td>${dateInfo}</td>
+            <td>${moveInfo}</td>
+            <td>${deviceInfo}</td>
+            <td style="font-size: 0.82rem;">${p.primary_diagnosis || '-'}</td>
+            <td style="font-size: 0.82rem; line-height: 1.4;">${surgeryDisplay}</td>
+            <td><span class="fw-bold">${p.doctor_owner || '-'}</span><br><small class="text-muted">${p.doctor_support || ''}</small></td>
+            <td><small class="text-muted">${p.address || '-'}</small></td>
+        </tr>`;
+        tbody.insertAdjacentHTML('beforeend', row);
         });
     }
 
