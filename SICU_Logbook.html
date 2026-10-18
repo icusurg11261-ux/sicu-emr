@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สมุดทะเบียน SICU 1 (Cross-tabulation)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root { --sicu-primary: #0d6efd; --sicu-dark: #0a58ca; }
+        body { background-color: #f4f7f6; font-family: sans-serif; padding-bottom: 50px; }
+        .page-header { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+        .filter-box { display: flex; gap: 15px; align-items: center; background: #f8f9fa; padding: 10px 20px; border-radius: 8px; border: 1px solid #dee2e6; flex-wrap: wrap; }
+        .table-wrapper { background: white; border-radius: 12px; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid #dee2e6; }
+        .table { margin-bottom: 0; font-size: 0.85rem; }
+        .table thead th { background-color: #0d6efd !important; color: white !important; text-align: center !important; font-weight: 600; padding: 15px 8px; vertical-align: middle; border-bottom: none; font-size: 0.8rem; border-right: 1px solid rgba(255,255,255,0.2); }
+        .table tbody td { vertical-align: top; padding: 10px 8px; border-right: 1px solid #f0f0f0; }
+        .table tbody tr:hover { background-color: #f8f9fa; }
+        .info-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 0.75rem; }
+        .badge-sepsis { background-color: #dc3545; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; display: inline-block; margin-bottom: 5px; }
+        .badge-status-active { background-color: #ffc107; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .badge-status-move { background-color: #198754; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .text-primary-custom { color: #0d6efd; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid px-4">
+    <!-- Header & Filters -->
+    <div class="page-header">
+        <div>
+            <h4 class="text-primary-custom mb-1">สมุดทะเบียนผู้ป่วยหอผู้ป่วยหนักศัลยกรรม 1</h4>
+            <span class="text-secondary" style="font-size: 0.9rem;">ระบบแสดงข้อมูลและสถิติแบบ Cross-tabulation</span>
+            <div class="mt-2">
+                <a href="SICU.html?action=new" class="btn btn-primary btn-sm fw-bold text-white">+ รับผู้ป่วยใหม่</a>
+                <a href="SICU_Dashboard_Yearly.html?action=view" class="btn btn-info btn-sm fw-bold text-dark ms-1">📊 หน้า Dashboard</a>
+                <a href="SICU_Report_Disease.html" class="btn btn-warning btn-sm fw-bold text-dark ms-1">📋 รายงานโรคระบบ</a>
+                <button class="btn btn-success btn-sm fw-bold ms-1" onclick="exportExcel()">📥 Export Excel</button>
+                <button class="btn btn-outline-danger btn-sm ms-1" onclick="signOut()">ออกจากระบบ</button>
+            </div>
+        </div>
+        <div class="filter-box">
+            <div class="d-flex align-items-center gap-2 border-end pe-3">
+                <label class="text-secondary mb-0" style="white-space: nowrap;">ตั้งแต่เดือน:</label>
+                <input type="month" class="form-control form-control-sm" id="filterMonthStart" onchange="clearFY(); applyFilters()">
+                <label class="text-secondary mb-0 mx-1" style="white-space: nowrap;">ถึง:</label>
+                <input type="month" class="form-control form-control-sm" id="filterMonthEnd" onchange="clearFY(); applyFilters()">
+            </div>
+            <div class="d-flex align-items-center gap-2 border-end pe-3">
+                <label class="text-secondary mb-0" style="white-space: nowrap;">ปีงบประมาณ:</label>
+                <select class="form-select form-select-sm" id="filterFiscalYear" onchange="setFY(); applyFilters()">
+                    <option value="">-- กำหนดเอง --</option>
+                </select>
+            </div>
+            <div class="d-flex align-items-center gap-2 border-end pe-3">
+                <label class="text-secondary mb-0" style="white-space: nowrap;">กลุ่มโรค:</label>
+                <select class="form-select form-select-sm" id="filterDisease" onchange="applyFilters()">
+                    <option value="">-- ทุกกลุ่มโรค (นับยอดยกมา) --</option>
+                    <option>Multiple injury (MI)</option><option>Head injury (HI)</option><option>Haemorrhagic stroke (CVD)</option>
+                    <option>Brain tumor</option><option>Blunt abdomen injury</option><option>Chest injury</option>
+                    <option>ORTHO</option><option>GEN</option>
+                </select>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <label class="text-danger fw-bold mb-0" style="white-space: nowrap;">Sepsis:</label>
+                <select class="form-select form-select-sm border-danger text-danger" id="filterSepsis" onchange="applyFilters()">
+                    <option value="">แสดงทั้งหมด</option>
+                    <option value="true">เฉพาะผู้ป่วย Sepsis</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="table-wrapper">
+        <div class="table-responsive">
+            <table class="table align-middle" id="logbookTable">
+                <thead>
+                    <tr>
+                        <th width="3%">NO</th>
+                        <th width="9%">HN<br>คำนำหน้า-สกุล<br>อายุ</th>
+                        <th width="13%">กลุ่มโรค<br>สาเหตุเข้า ICU<br>APACHE/TRISS</th>
+                        <th width="9%">เข้า ICU<br>ออก ICU<br>LOS</th>
+                        <th width="11%">ประเภทรับเข้า<br>ประเภทจำหน่าย</th>
+                        <th width="12%">จำนวนวันอุปกรณ์<br><small>(ETT, Vent, Cath, IV, C-Line)</small></th>
+                        <th width="11%">การวินิจฉัยโรค</th>
+                        <th width="10%">การผ่าตัด</th>
+                        <th width="8%">แพทย์</th>
+                        <th width="8%">ที่อยู่</th>
+                        <th width="6%">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="11" class="text-center text-secondary py-4">กำลังโหลดข้อมูลจากฐานข้อมูล...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const supabaseUrl = 'https://aakyylpfusmwlsvksaim.supabase.co';
+    const supabaseKey = 'sb_publishable_LjzvHRqLIDSE8OQhEHJPVw_Lb5XL9T8';
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+    let allPatients = []; 
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const now = new Date();
+        const currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+        document.getElementById('filterMonthStart').value = currentMonthStr;
+        document.getElementById('filterMonthEnd').value = currentMonthStr;
+        
+        const currentYearBE = now.getFullYear() + 543;
+        const currentFY = (now.getMonth() >= 9) ? currentYearBE + 1 : currentYearBE; 
+        const fySelect = document.getElementById('filterFiscalYear');
+        for(let y = currentFY - 3; y <= currentFY + 2; y++){
+            fySelect.options.add(new Option(`ปีงบฯ ${y}`, y));
+        }
+    });
+
+    function clearFY() { document.getElementById('filterFiscalYear').value = ""; }
+    function setFY() {
+        const fyVal = document.getElementById('filterFiscalYear').value;
+        if(fyVal) {
+            const cYear = parseInt(fyVal) - 543;
+            document.getElementById('filterMonthStart').value = (cYear - 1) + "-10";
+            document.getElementById('filterMonthEnd').value = cYear + "-09";
+        }
+    }
+
+    async function checkAuth() {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) window.location.href = 'index.html'; else fetchPatients();
+    }
+    checkAuth();
+    async function signOut() { await supabaseClient.auth.signOut(); window.location.href = 'index.html'; }
+
+    async function fetchPatients() {
+        const { data, error } = await supabaseClient.from('patients').select('*').order('icu_in_date', { ascending: true });
+        if (!error) { allPatients = data; applyFilters(); }
+    }
+
+    async function deletePatient(hn) {
+        if (confirm(`⚠️ คุณแน่ใจหรือไม่ที่ต้องการลบเวชระเบียนของผู้ป่วย HN: ${hn} ?\n(ข้อมูลที่ลบไปแล้วจะไม่สามารถกู้คืนได้)`)) {
+            const { error } = await supabaseClient.from('patients').delete().eq('hn', hn);
+            if (error) { alert('❌ เกิดข้อผิดพลาดในการลบ: ' + error.message); } 
+            else { alert('✅ ลบข้อมูลสำเร็จ'); fetchPatients(); }
+        }
+    }
+
+    function formatDateThai(dateStr) {
+        if (!dateStr) return '-';
+        const parts = dateStr.split('T')[0].split('-'); 
+        const yearTH = parseInt(parts[0]) + 543;
+        return `${parts[2]}/${parts[1]}/${yearTH}`;
+    }
+
+    function _coreCalcDays(dStart, dEnd, fStart, fEnd, hasDateFilter) {
+        let Y1 = dStart.getFullYear();
+        let M1 = dStart.getMonth();
+        let D1 = dStart.getDate();
+
+        let Y2 = dEnd.getFullYear();
+        let M2 = dEnd.getMonth();
+        let D2 = dEnd.getDate();
+
+        let total = 0;
+        let filtered = 0;
+
+        let startMonthVal = fStart ? (fStart.getFullYear() * 12 + fStart.getMonth()) : 0;
+        let endMonthVal = fEnd ? (fEnd.getFullYear() * 12 + fEnd.getMonth()) : 0;
+
+        if (Y1 === Y2 && M1 === M2) {
+            let days = D2 - D1;
+            if (days === 0) days = 1; 
+            total = days;
+            
+            let iterMonthVal = Y1 * 12 + M1;
+            if (hasDateFilter) {
+                if (iterMonthVal >= startMonthVal && iterMonthVal <= endMonthVal) filtered = days;
+            } else {
+                filtered = days;
+            }
+        } 
+        else {
+            let currentYear = Y1;
+            let currentMonth = M1;
+
+            while (currentYear < Y2 || (currentYear === Y2 && currentMonth <= M2)) {
+                let daysInThisMonth = 0;
+                let isAdmitMonth = (currentYear === Y1 && currentMonth === M1);
+                let isDischargeMonth = (currentYear === Y2 && currentMonth === M2);
+                let lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+                if (isAdmitMonth) {
+                    daysInThisMonth = lastDay - D1;
+                    if (daysInThisMonth === 0) daysInThisMonth = 1; 
+                } else if (isDischargeMonth) {
+                    daysInThisMonth = D2; 
+                } else {
+                    daysInThisMonth = lastDay; 
+                }
+
+                total += daysInThisMonth;
+
+                let iterMonthVal = currentYear * 12 + currentMonth;
+                if (hasDateFilter) {
+                    if (iterMonthVal >= startMonthVal && iterMonthVal <= endMonthVal) filtered += daysInThisMonth;
+                } else {
+                    filtered += daysInThisMonth;
+                }
+
+                currentMonth++;
+                if (currentMonth > 11) {
+                    currentMonth = 0;
+                    currentYear++;
+                }
+            }
+        }
+        return { total, filtered };
+    }
+
+    function calculateDaysWithFilter(startStr, endStr, fStart, fEnd, hasDateFilter) {
+        if (!startStr) return { total: 0, filtered: 0 };
+        let dStart = new Date(startStr.split('T')[0]);
+        let dEnd = endStr ? new Date(endStr.split('T')[0]) : new Date(); 
+        dStart.setHours(0,0,0,0);
+        dEnd.setHours(0,0,0,0);
+        if (dStart > dEnd) return { total: 0, filtered: 0 };
+        return _coreCalcDays(dStart, dEnd, fStart, fEnd, hasDateFilter);
+    }
+
+    function calculateDeviceDaysWithFilter(devOnStr, devOffStr, pInStr, pOutStr, fStart, fEnd, hasDateFilter) {
+        if (!devOnStr || !pInStr) return { total: 0, filtered: 0 };
+        let dOn = new Date(devOnStr.split('T')[0]);
+        let dOff = devOffStr ? new Date(devOffStr.split('T')[0]) : null;
+        let pIn = new Date(pInStr.split('T')[0]);
+        let pOut = pOutStr ? new Date(pOutStr.split('T')[0]) : new Date();
+        
+        let start = dOn > pIn ? dOn : pIn; 
+        let end = dOff ? (dOff < pOut ? dOff : pOut) : pOut;
+        start.setHours(0,0,0,0);
+        end.setHours(0,0,0,0);
+        
+        if (start > end) return { total: 0, filtered: 0 };
+        return _coreCalcDays(start, end, fStart, fEnd, hasDateFilter);
+    }
+
+    function applyFilters() {
+        const startVal = document.getElementById('filterMonthStart').value;
+        const endVal = document.getElementById('filterMonthEnd').value;
+        const diseaseFilter = document.getElementById('filterDisease').value;
+        const sepsisFilter = document.getElementById('filterSepsis').value;
+
+        let fStart = null;
+        let fEnd = null;
+        let hasDateFilter = false;
+
+        if (startVal) { 
+            const [sy, sm] = startVal.split('-'); 
+            fStart = new Date(sy, sm - 1, 1); 
+            fStart.setHours(0,0,0,0);
+            hasDateFilter = true; 
+        }
+        if (endVal) { 
+            const [ey, em] = endVal.split('-'); 
+            fEnd = new Date(ey, em, 0); 
+            fEnd.setHours(23,59,59,999);
+            hasDateFilter = true; 
+        }
+
+        let filteredData = allPatients.filter(p => {
+            let matchTime = true, matchDisease = true, matchSepsis = true;
+
+            if (hasDateFilter) {
+                if (!p.icu_in_date) { matchTime = false; } 
+                else {
+                    const inD = new Date(p.icu_in_date);
+                    const outD = p.discharge_date ? new Date(p.discharge_date) : new Date(2100, 0, 1);
+
+                    if (diseaseFilter === "") {
+                        matchTime = (inD <= fEnd) && (outD >= fStart);
+                    } else {
+                        matchTime = (inD >= fStart) && (inD <= fEnd);
+                    }
+                }
+            }
+
+            if (diseaseFilter) matchDisease = p.disease_group === diseaseFilter;
+            if (sepsisFilter === "true") matchSepsis = p.has_sepsis === true;
+
+            return matchTime && matchDisease && matchSepsis;
+        });
+
+        renderTable(filteredData, fStart, fEnd, hasDateFilter);
+    }
+
+    function editPatient(hn) { 
+        window.location.href = 'SICU.html?hn=' + hn + '&t=' + new Date().getTime(); 
+    }
+
+    const formatDeviceText = (tot, fil, hasFilter) => {
+        if (tot === 0) return '-';
+        if (!hasFilter || tot === fil) return tot;
+        return `<span class="text-danger fw-bold">${fil}</span> <small class="text-muted">(รวม ${tot})</small>`;
+    };
+
+    function renderTable(data, fStart, fEnd, hasDateFilter) {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="11" class="text-center text-secondary py-4">ไม่พบข้อมูลผู้ป่วยตามเงื่อนไขที่เลือก</td></tr>'; return; }
+
+        data.forEach((p, index) => {
+            const losData = calculateDaysWithFilter(p.icu_in_date, p.discharge_date, fStart, fEnd, hasDateFilter);
+            
+            let ettTotal = 0, ettFiltered = 0;
+            let ventTotal = 0, ventFiltered = 0;
+            let foleyTotal = 0, foleyFiltered = 0;
+            let clineTotal = 0, clineFiltered = 0;
+            let pivTotal = 0, pivFiltered = 0;
+
+            if(p.device_records) {
+                try {
+                    let devs = JSON.parse(p.device_records);
+                    if(devs.ett) devs.ett.forEach(d => { let res = calculateDeviceDaysWithFilter(d.on, d.off, p.icu_in_date, p.discharge_date, fStart, fEnd, hasDateFilter); ettTotal += res.total; ettFiltered += res.filtered; });
+                    if(devs.vent) devs.vent.forEach(d => { let res = calculateDeviceDaysWithFilter(d.on, d.off, p.icu_in_date, p.discharge_date, fStart, fEnd, hasDateFilter); ventTotal += res.total; ventFiltered += res.filtered; });
+                    if(devs.foley) devs.foley.forEach(d => { let res = calculateDeviceDaysWithFilter(d.on, d.off, p.icu_in_date, p.discharge_date, fStart, fEnd, hasDateFilter); foleyTotal += res.total; foleyFiltered += res.filtered; });
+                    if(devs.cline) devs.cline.forEach(d => { let res = calculateDeviceDaysWithFilter(d.on, d.off, p.icu_in_date, p.discharge_date, fStart, fEnd, hasDateFilter); clineTotal += res.total; clineFiltered += res.filtered; });
+                    if(devs.piv) devs.piv.forEach(d => { let res = calculateDeviceDaysWithFilter(d.on, d.off, p.icu_in_date, p.discharge_date, fStart, fEnd, hasDateFilter); pivTotal += res.total; pivFiltered += res.filtered; });
+                } catch(e){}
+            }
+
+            const dateInfo = `
+                เข้า: <span class="fw-bold text-success">${formatDateThai(p.icu_in_date)}</span><br>
+                ออก: <span class="fw-bold">${formatDateThai(p.discharge_date)}</span><br>
+                <div class="mt-1">
+                    <span class="text-primary-custom d-inline-block">LOS รวม: ${losData.total} วัน</span>
+                    ${(hasDateFilter && losData.total !== losData.filtered) ? `<br><span class="text-danger fw-bold" style="font-size:0.75rem;">(เฉพาะเดือนนี้: ${losData.filtered} วัน)</span>` : ''}
+                </div>
+            `;
+
+            const patientInfo = `
+                <span class="text-primary-custom cursor-pointer" onclick="editPatient('${p.hn}')" style="cursor:pointer;text-decoration:underline;">${p.hn}</span><br>
+                ${p.prefix || ''}${p.firstname || ''} ${p.lastname || ''}<br>
+                <span class="text-secondary">อายุ ${p.age || '-'} ปี</span>
+            `;
+
+            let sepsisBadge = p.has_sepsis ? `<div class="badge-sepsis">Sepsis: ${p.sepsis_type || 'มีภาวะ'}</div><br>` : '';
+            const clinicalInfo = `
+                <span class="text-primary-custom">${p.disease_group || '-'}</span><br>
+                ${sepsisBadge}
+                <span class="text-secondary">เหตุ: ${p.icu_reason || '-'}</span><br>
+                <span class="text-secondary">AP: ${p.apache_score || '-'} | TRISS: ${p.triss_score || '-'}</span>
+            `;
+
+            let outStatusBadge = p.status === 'กำลังรักษา (In ICU)' ? `<span class="badge-status-active">ยังไม่ออก</span>` : `<span class="badge-status-move">${p.status || '-'}</span>`;
+            const moveInfo = `
+                <div class="info-box">
+                    <span class="text-primary-custom">รับ:</span> ${p.adm_type || '-'}<br>
+                    <span class="text-secondary">จาก:</span> ${p.adm_from || '-'}
+                </div>
+                <div class="info-box">
+                    <span class="text-success fw-bold">ออก:</span> ${outStatusBadge}<br>
+                    <span class="text-secondary">ไป:</span> ${p.destination || '-'}
+                </div>
+            `;
+
+            const deviceInfo = `
+            <span class="text-secondary" style="line-height:1.6;">
+            ETT: ${formatDeviceText(ettTotal, ettFiltered, hasDateFilter)}<br>
+            Ven: ${formatDeviceText(ventTotal, ventFiltered, hasDateFilter)}<br>
+            Cath: ${formatDeviceText(foleyTotal, foleyFiltered, hasDateFilter)}<br>
+            IV: ${formatDeviceText(pivTotal, pivFiltered, hasDateFilter)}<br>
+            C-Line: ${formatDeviceText(clineTotal, clineFiltered, hasDateFilter)}
+            </span>
+        `;
+
+            let surgeryDisplay = '-';
+            if (p.surgery) {
+                surgeryDisplay = p.surgery.split('\n').map(s => {
+                    let parts = s.split(' : ');
+                    if(parts[0]) parts[0] = formatDateThai(parts[0]);
+                    return parts.join(' : ');
+                }).join('<br>');
+            }
+
+            const actionInfo = `
+                <button class="btn btn-sm btn-outline-danger w-100" onclick="deletePatient('${p.hn}')">🗑️ ลบ</button>
+            `;
+
+            const row = `<tr>
+                <td class="text-center">${index + 1}</td>
+                <td>${patientInfo}</td>
+                <td>${clinicalInfo}</td>
+                <td>${dateInfo}</td>
+                <td>${moveInfo}</td>
+                <td>${deviceInfo}</td>
+                <td>${p.primary_diagnosis || '-'}</td>
+                <td>${surgeryDisplay}</td>
+                <td><span class="fw-bold">${p.doctor_owner || '-'}</span><br><small class="text-muted">${p.doctor_support || ''}</small></td>
+                <td><small class="text-muted">${p.address || '-'}</small></td>
+                <td>${actionInfo}</td>
+            </tr>`;
+            tbody.insertAdjacentHTML('beforeend', row);
+        });
+    }
+
+    function exportExcel() { const ws = XLSX.utils.json_to_sheet(allPatients); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "PatientLogbook"); XLSX.writeFile(wb, "SICU_Logbook_Export.xlsx"); }
+</script>
+</body>
+</html>

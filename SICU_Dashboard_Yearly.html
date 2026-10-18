@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SICU 1 Executive Dashboard (One Page)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { 
+            --c-green: #10b981; 
+            --c-red: #ef4444; 
+            --c-purple: #8b5cf6; 
+            --c-orange: #f97316; 
+            --c-dark: #0f766e;
+            --bg-body: #f1f5f9;
+        }
+        body { background-color: var(--bg-body); font-family: sans-serif; overflow-x: hidden; margin: 0; padding: 0; }
+        
+        /* Header แบบกะทัดรัด */
+        .header-bar { background-color: var(--c-dark); color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header-bar h5 { margin: 0; font-weight: bold; font-size: 1.1rem; }
+        
+        .main-container { padding: 10px 15px; max-width: 100%; margin: 0 auto; }
+        
+        /* แถบตัวกรอง (Filters) ให้ชิดกันมากขึ้น */
+        .filter-bar { background: white; padding: 10px 15px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; border: 1px solid #e2e8f0; }
+        .filter-item { display: flex; align-items: center; gap: 8px; }
+        .filter-item label { font-size: 0.85rem; font-weight: bold; color: #475569; margin: 0; white-space: nowrap; }
+        .filter-item input, .filter-item select { font-size: 0.85rem; padding: 4px 8px; height: 30px; }
+        
+        /* กล่อง KPI (มีแถบสีแบบรูปตัวอย่าง) */
+        .kpi-card { background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100%; }
+        .kpi-head { padding: 6px; text-align: center; color: white; font-weight: bold; font-size: 0.85rem; }
+        .kpi-body { padding: 10px; text-align: center; display: flex; flex-direction: column; justify-content: center; flex: 1; }
+        .kpi-val { font-size: 2rem; font-weight: bold; line-height: 1.2; }
+        .kpi-sub { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+        
+        .bg-green { background-color: var(--c-green); } .text-green { color: var(--c-green); }
+        .bg-red { background-color: var(--c-red); } .text-red { color: var(--c-red); }
+        .bg-purple { background-color: var(--c-purple); } .text-purple { color: var(--c-purple); }
+        .bg-orange { background-color: var(--c-orange); } .text-orange { color: var(--c-orange); }
+
+        /* กล่องกราฟ */
+        .chart-card { background: white; border-radius: 6px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; height: 100%; display: flex; flex-direction: column; }
+        .chart-title { font-size: 0.9rem; font-weight: bold; color: #334155; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; }
+        .chart-wrap { flex: 1; position: relative; width: 100%; }
+        
+        /* กำหนดความสูงกราฟให้พอดีจอ 24 นิ้ว */
+        .h-row1 { height: 260px; }
+        .h-row2 { height: 220px; }
+        
+        /* ลด gap ระหว่างคอลัมน์ให้แน่นขึ้น */
+        .g-custom { --bs-gutter-x: 10px; --bs-gutter-y: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="header-bar">
+    <h5>📊 SICU 1 Executive Dashboard</h5>
+    <div>
+        <a href="SICU_Logbook.html" class="btn btn-outline-light btn-sm" style="font-size:0.8rem; padding: 2px 8px;">สมุดทะเบียน</a>
+        <button onclick="window.location.href='index.html'" class="btn btn-danger btn-sm ms-2" style="font-size:0.8rem; padding: 2px 8px;">ออก</button>
+    </div>
+</div>
+
+<div class="main-container">
+    <!-- แถบตัวกรอง -->
+    <div class="filter-bar">
+        <div class="filter-item">
+            <label>ตั้งแต่เดือน:</label>
+            <input type="month" id="filterStartMonth" class="form-control border-secondary" onchange="applyFilters()">
+        </div>
+        <div class="filter-item">
+            <label>ถึงเดือน:</label>
+            <input type="month" id="filterEndMonth" class="form-control border-secondary" onchange="applyFilters()">
+        </div>
+        <div class="filter-item ms-md-3">
+            <label>กลุ่มโรค:</label>
+            <select class="form-select border-secondary" id="filterDisease" onchange="applyFilters()" style="min-width: 200px;">
+                <option value="">-- รวมทุกกลุ่มโรค --</option>
+                <option>Multiple injury (MI)</option><option>Head injury (HI)</option><option>Haemorrhagic stroke (CVD)</option>
+                <option>Brain tumor</option><option>Blunt abdomen injury</option><option>Chest injury</option><option>ORTHO</option><option>GEN</option>
+            </select>
+        </div>
+        <div class="ms-auto">
+            <button class="btn btn-sm btn-secondary" onclick="resetFilters()">🔄 ล้าง</button>
+        </div>
+    </div>
+
+    <!-- แถวที่ 1: KPI Scorecards -->
+    <div class="row g-custom mb-2">
+        <div class="col-6 col-md-3">
+            <div class="kpi-card">
+                <div class="kpi-head bg-green">จำนวนผู้ป่วยรับเข้า</div>
+                <div class="kpi-body">
+                    <div class="kpi-val text-green" id="kpiTotal">0</div>
+                    <div class="kpi-sub">ราย (ตามช่วงเวลา/โรค)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-card">
+                <div class="kpi-head bg-red">อัตราตาย (Mortality Rate)</div>
+                <div class="kpi-body">
+                    <div class="kpi-val text-red"><span id="kpiMortality">0.0</span>%</div>
+                    <div class="kpi-sub" id="kpiMortalityText">0 จาก 0 ราย</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-card">
+                <div class="kpi-head bg-purple">วันนอนเฉลี่ย (Average LOS)</div>
+                <div class="kpi-body">
+                    <div class="kpi-val text-purple"><span id="kpiLOS">0.0</span></div>
+                    <div class="kpi-sub">วัน/ราย</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="kpi-card">
+                <div class="kpi-head bg-orange">อุบัติการณ์แทรกซ้อน (Risk)</div>
+                <div class="kpi-body">
+                    <div class="kpi-val text-orange" id="kpiCompCount">0</div>
+                    <div class="kpi-sub">รายที่เกิดภาวะแทรกซ้อน</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- แถวที่ 2: กราฟสัดส่วนโรค และ กราฟรับเข้า/ตาย -->
+    <div class="row g-custom mb-2">
+        <div class="col-md-4">
+            <div class="chart-card h-row1">
+                <div class="chart-title">🍩 สัดส่วนกลุ่มโรค (แสดงภาพรวมทั้งหมดเสมอ)</div>
+                <div class="chart-wrap"><canvas id="chartDiseasePie"></canvas></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="chart-card h-row1">
+                <div class="chart-title">📈 ยอดรับเข้า และ อัตราการเสียชีวิต</div>
+                <div class="chart-wrap"><canvas id="chartAdmitMortality"></canvas></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="chart-card h-row1">
+                <div class="chart-title">🛌 วันนอนเฉลี่ย (Average LOS) รายเดือน</div>
+                <div class="chart-wrap"><canvas id="chartLOS"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- แถวที่ 3: กราฟความเสี่ยงแบบเต็มจอ -->
+    <div class="row g-custom">
+        <div class="col-12">
+            <div class="chart-card h-row2">
+                <div class="chart-title">🚨 สถิติอุบัติการณ์และตัวชี้วัดความเสี่ยง (Clinical Risks)</div>
+                <div class="chart-wrap"><canvas id="chartComplications"></canvas></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const supabaseUrl = 'https://aakyylpfusmwlsvksaim.supabase.co';
+    const supabaseKey = 'sb_publishable_LjzvHRqLIDSE8OQhEHJPVw_Lb5XL9T8';
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+    
+    let allPatients = [];
+    let charts = {}; 
+
+    document.addEventListener("DOMContentLoaded", () => {
+        setupDefaultDates();
+        fetchData();
+    });
+
+    function setupDefaultDates() {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); 
+        let startYear = currentMonth >= 9 ? currentYear : currentYear - 1;
+        let startMonthStr = `${startYear}-10`;
+        let endMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        document.getElementById('filterStartMonth').value = startMonthStr;
+        document.getElementById('filterEndMonth').value = endMonthStr;
+    }
+
+    function resetFilters() {
+        setupDefaultDates();
+        document.getElementById('filterDisease').value = "";
+        applyFilters();
+    }
+
+    async function fetchData() {
+        const { data, error } = await supabaseClient.from('patients').select('*').order('icu_in_date', { ascending: true });
+        if (!error) { allPatients = data; applyFilters(); }
+    }
+
+    function getMonthsRange(start, end) {
+        let dateStart = new Date(start + '-01');
+        let dateEnd = new Date(end + '-01');
+        let months = [];
+        let current = new Date(dateStart);
+        const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+        while (current <= dateEnd) {
+            months.push({
+                key: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`,
+                label: monthNames[current.getMonth()] + " " + (current.getFullYear() + 543).toString().substring(2)
+            });
+            current.setMonth(current.getMonth() + 1);
+        }
+        return months;
+    }
+
+    function calcDays(startStr, endStr) {
+        if (!startStr) return 0;
+        let dStart = new Date(startStr.split('T')[0]);
+        let dEnd = endStr ? new Date(endStr.split('T')[0]) : new Date();
+        dStart.setHours(0,0,0,0); dEnd.setHours(0,0,0,0);
+        if (dStart > dEnd) return 0;
+
+        let isCrossMonth = (dStart.getMonth() !== dEnd.getMonth() || dStart.getFullYear() !== dEnd.getFullYear());
+        let total = 0;
+        
+        if (dStart.getTime() === dEnd.getTime()) {
+            total = 1;
+        } else {
+            total = Math.round((dEnd - dStart) / 86400000); 
+            if (isCrossMonth) total += 1;
+        }
+        return total;
+    }
+
+    function applyFilters() {
+        const startVal = document.getElementById('filterStartMonth').value;
+        const endVal = document.getElementById('filterEndMonth').value;
+        const selDis = document.getElementById('filterDisease').value;
+
+        if(!startVal || !endVal) return;
+        if(startVal > endVal) { alert("เดือนเริ่มต้นต้องมาก่อนเดือนสิ้นสุด"); return; }
+
+        const monthsArray = getMonthsRange(startVal, endVal);
+        let validMonthKeys = monthsArray.map(m => m.key);
+
+        let filteredData = allPatients.filter(p => {
+            if (!p.icu_in_date) return false;
+            let pMonth = p.icu_in_date.substring(0, 7);
+            let passTime = validMonthKeys.includes(pMonth);
+            let passDis = selDis ? (p.disease_group === selDis) : true;
+            return passTime && passDis;
+        });
+
+        let timeOnlyData = allPatients.filter(p => {
+            if (!p.icu_in_date) return false;
+            let pMonth = p.icu_in_date.substring(0, 7);
+            return validMonthKeys.includes(pMonth);
+        });
+
+        updateDashboard(filteredData, timeOnlyData, monthsArray);
+    }
+
+    function updateDashboard(data, timeOnlyData, monthsArray) {
+        let total = data.length, deaths = 0, sumLOS = 0, patientWithComp = 0;
+
+        data.forEach(p => {
+            if (p.status === 'เสียชีวิต') deaths++;
+            sumLOS += calcDays(p.icu_in_date, p.discharge_date);
+            let cStr = p.complication || "";
+            if (cStr.trim() !== "" && cStr !== "[]") patientWithComp++;
+        });
+
+        document.getElementById('kpiTotal').innerText = total;
+        document.getElementById('kpiMortality').innerText = total > 0 ? ((deaths / total) * 100).toFixed(1) : "0.0";
+        document.getElementById('kpiMortalityText').innerText = `${deaths} จาก ${total} ราย`;
+        document.getElementById('kpiLOS').innerText = total > 0 ? (sumLOS / total).toFixed(1) : "0.0";
+        document.getElementById('kpiCompCount').innerText = patientWithComp;
+
+        let monthStats = {};
+        monthsArray.forEach(m => { monthStats[m.key] = { admits: 0, deaths: 0, sumLOS: 0, vap: 0, clabsi: 0, extubate: 0 }; });
+
+        data.forEach(p => {
+            if(!p.icu_in_date) return;
+            let pMonth = p.icu_in_date.substring(0, 7);
+            if(monthStats[pMonth]) {
+                monthStats[pMonth].admits++;
+                if (p.status === 'เสียชีวิต') monthStats[pMonth].deaths++;
+                monthStats[pMonth].sumLOS += calcDays(p.icu_in_date, p.discharge_date);
+                let cStr = p.complication || "";
+                if (cStr.includes("VAP")) monthStats[pMonth].vap++;
+                if (cStr.includes("CLABSI")) monthStats[pMonth].clabsi++;
+                if (cStr.includes("Extubation") || cStr.includes("ETT")) monthStats[pMonth].extubate++;
+            }
+        });
+
+        const chartLabels = monthsArray.map(m => m.label);
+        const admitData = monthsArray.map(m => monthStats[m.key].admits);
+        const mortData = monthsArray.map(m => monthStats[m.key].admits > 0 ? (monthStats[m.key].deaths / monthStats[m.key].admits * 100).toFixed(1) : 0);
+        const losData = monthsArray.map(m => monthStats[m.key].admits > 0 ? (monthStats[m.key].sumLOS / monthStats[m.key].admits).toFixed(1) : 0);
+        const vapData = monthsArray.map(m => monthStats[m.key].vap);
+        const clabsiData = monthsArray.map(m => monthStats[m.key].clabsi);
+        const extData = monthsArray.map(m => monthStats[m.key].extubate);
+
+        let disCounts = {};
+        timeOnlyData.forEach(p => {
+            let dg = p.disease_group || 'ไม่ระบุ';
+            disCounts[dg] = (disCounts[dg] || 0) + 1;
+        });
+
+        // การตั้งค่ากราฟให้สวยงาม กะทัดรัด
+        const defaultFont = { family: 'sans-serif', size: 10 };
+
+        renderChart('chartAdmitMortality', 'bar', {
+            labels: chartLabels,
+            datasets: [
+                { type: 'bar', label: 'ยอดรับเข้า (คน)', data: admitData, backgroundColor: '#10b981', yAxisID: 'y', borderRadius: 4, barPercentage: 0.6 },
+                { type: 'line', label: 'อัตราตาย (%)', data: mortData, borderColor: '#ef4444', backgroundColor: '#ef4444', yAxisID: 'y1', tension: 0.2, pointRadius: 3 }
+            ]
+        }, {
+            scales: {
+                y: { type: 'linear', position: 'left', beginAtZero: true, ticks: { font: defaultFont } },
+                y1: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: defaultFont } },
+                x: { ticks: { font: defaultFont } }
+            },
+            plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: defaultFont } } }
+        });
+
+        renderChart('chartLOS', 'line', {
+            labels: chartLabels,
+            datasets: [{ label: 'วันนอนเฉลี่ย (วัน)', data: losData, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.15)', fill: true, tension: 0.3, pointRadius: 4 }]
+        }, { 
+            scales: { y: { beginAtZero: true, ticks: { font: defaultFont } }, x: { ticks: { font: defaultFont } } },
+            plugins: { legend: { display: false } }
+        });
+
+        renderChart('chartDiseasePie', 'doughnut', {
+            labels: Object.keys(disCounts),
+            datasets: [{
+                data: Object.values(disCounts),
+                backgroundColor: ['#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#0ea5e9', '#64748b'],
+                borderWidth: 1
+            }]
+        }, { 
+            plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: defaultFont } } },
+            layout: { padding: 10 }
+        });
+
+        renderChart('chartComplications', 'bar', {
+            labels: chartLabels,
+            datasets: [
+                { label: 'VAP', data: vapData, backgroundColor: '#ef4444', borderRadius: 2 },
+                { label: 'CLABSI', data: clabsiData, backgroundColor: '#f97316', borderRadius: 2 },
+                { label: 'Unplanned Extubation', data: extData, backgroundColor: '#eab308', borderRadius: 2 }
+            ]
+        }, { 
+            scales: { 
+                x: { stacked: true, ticks: { font: defaultFont } }, 
+                y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1, font: defaultFont } } 
+            },
+            plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: defaultFont } } },
+            maintainAspectRatio: false
+        });
+    }
+
+    function renderChart(canvasId, type, data, extraOptions = {}) {
+        if (charts[canvasId]) charts[canvasId].destroy();
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        const baseOptions = { responsive: true, maintainAspectRatio: false };
+        charts[canvasId] = new Chart(ctx, { type: type, data: data, options: { ...baseOptions, ...extraOptions } });
+    }
+</script>
+</body>
+</html>

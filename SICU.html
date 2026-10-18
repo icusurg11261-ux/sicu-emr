@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบเวชระเบียน SICU 1</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --sicu-primary: #126d70; --sicu-accent: #f8f9fa; }
+        body { background-color: #f4f7f6; font-family: sans-serif; padding-bottom: 70px; }
+        .container { max-width: 1100px; margin-top: 30px; background: white; padding: 35px; border-radius: 16px; box-shadow: 0 8px 25px rgba(0,0,0,0.06); }
+        .main-title { background: var(--sicu-primary); color: white; padding: 22px; border-radius: 12px; text-align: center; font-weight: bold; margin-bottom: 30px;}
+        .global-header { background-color: #e8f5e9; border-top: 6px solid var(--sicu-primary); border-bottom: 3px solid #c8e6c9; padding: 25px; border-radius: 12px; margin-bottom: 35px; }
+        .nav-pills { background-color: var(--sicu-accent); padding: 12px; border-radius: 14px; margin-bottom: 30px; }
+        .nav-pills .nav-link { font-weight: 700; color: #6c757d; border: 2px solid #e2e8f0; margin: 0 5px; border-radius: 10px; }
+        .nav-pills .nav-link.active { background-color: var(--sicu-primary) !important; color: white !important; }
+        .score-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; text-align: center; font-weight: bold; border: 2px solid #e2e8f0; height: 100%; }
+        .score-box-apache { background-color: #fffbeb; border-color: #fde68a; }
+        .highlight { font-size: 2rem; display: block; margin-top: 10px; color: var(--sicu-primary); }
+        .section-title { border-left: 5px solid var(--sicu-primary); padding-left: 12px; margin-top: 25px; margin-bottom: 20px; font-weight: bold; color: var(--sicu-primary); }
+        #ocr-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1050; align-items: center; justify-content: center; flex-direction: column; color: white; }
+    </style>
+</head>
+<body>
+
+<div id="ocr-overlay">
+    <div class="spinner-border text-light" style="width: 3rem; height: 3rem;" role="status"></div>
+    <h4 class="mt-3">กำลังสกัดข้อความจากภาพ...</h4>
+    <input type="file" id="image-uploader" accept="image/*" style="display: none;" onchange="processImage(this)">
+</div>
+
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="main-title mb-0 flex-grow-1">📋 ระบบเวชระเบียนหอผู้ป่วยหนักศัลยกรรม 1 (SICU 1)</h2>
+        <button class="btn btn-outline-danger ms-3 fw-bold" onclick="signOut()">ออกจากระบบ</button>
+    </div>
+
+    <!-- ข้อมูลเบื้องต้น -->
+    <div class="global-header">
+        <h5 class="text-primary mb-3 border-bottom pb-2 fw-bold">ข้อมูลเบื้องต้นผู้ป่วย (Patient Identification)</h5>
+        <div class="row g-3">
+            <div class="col-md-2"><label class="form-label text-danger">HN *</label><input type="text" class="form-control border-danger" id="hn"></div>
+            <div class="col-md-2"><label class="form-label">คำนำหน้า</label><select class="form-select" id="prefix"><option>นาย</option><option>นาง</option><option>นางสาว</option><option>ด.ช.</option><option>ด.ญ.</option></select></div>
+            <div class="col-md-3"><label class="form-label">ชื่อ</label><input type="text" class="form-control" id="firstName"></div>
+            <div class="col-md-3"><label class="form-label">สกุล</label><input type="text" class="form-control" id="lastName"></div>
+            <div class="col-md-2"><label class="form-label text-danger">อายุ (ปี) *</label><input type="number" class="form-control border-danger" id="age" oninput="calcTRISS(); calcAPACHE();"></div>
+        </div>
+        
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <label class="form-label fw-bold">บ้านเลขที่ / หมู่</label>
+                <input type="text" class="form-control" id="addr_detail" placeholder="เช่น 123 ม.4">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-bold">จังหวัด</label>
+                <select class="form-select" id="addr_province" onchange="updateAmphoe()">
+                    <option value="">-- เลือกจังหวัด --</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-bold">อำเภอ</label>
+                <select class="form-select" id="addr_amphoe" onchange="updateTambon()" disabled>
+                    <option value="">-- เลือกอำเภอ --</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-bold">ตำบล</label>
+                <select class="form-select" id="addr_tambon" disabled>
+                    <option value="">-- เลือกตำบล --</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row g-3 mt-1 align-items-end">
+            <div class="col-md-2"><label class="form-label text-danger">วันที่เข้า ICU *</label><input type="date" class="form-control border-danger" id="icuInDate"></div>
+            <div class="col-md-2"><label class="form-label text-danger">ประเภทรับเข้า *</label><select class="form-select border-danger" id="admType"><option value="">-- เลือก --</option><option>รับใหม่ (ER/OPD)</option><option>รับย้าย (จาก Ward)</option><option>รับหลังผ่าตัด (OR)</option><option>Refer</option></select></div>
+            <div class="col-md-3"><label class="form-label">รับจาก (ระบุแผนก/รพ.)</label><input type="text" class="form-control" id="admFrom"></div>
+            <div class="col-md-5"><label class="form-label text-danger">กลุ่มโรคหลัก *</label><input class="form-control border-danger" list="diseaseList" id="diseaseGroup"><datalist id="diseaseList"><option value="Multiple injury (MI)"><option value="Head injury (HI)"><option value="Haemorrhagic stroke (CVD)"><option value="Brain tumor"><option value="Blunt abdomen injury"><option value="Chest injury"><option value="ORTHO"><option value="GEN"></datalist></div>
+        </div>
+        
+        <div class="row g-3 mt-1 align-items-end">
+            <div class="col-md-10"><label class="form-label">การวินิจฉัยโรคหลัก</label><input type="text" class="form-control" id="primaryDiagnosis"></div>
+            <div class="col-md-2"><button type="button" class="btn btn-outline-secondary w-100 fw-bold bg-white" onclick="triggerScan('primaryDiagnosis')">📷 สแกนภาพ</button></div>
+        </div>
+
+        <!-- Sepsis Bundle -->
+        <div class="row g-3 mt-4 bg-white p-3 rounded shadow-sm mx-0" style="border: 2px solid #dc3545;">
+            <div class="col-md-12">
+                <div class="form-check form-switch mb-2 d-flex align-items-center">
+                    <input class="form-check-input" type="checkbox" id="hasSepsis" onchange="toggleSepsisDetail()" style="transform: scale(1.6); margin-left: 10px; margin-right: 15px;">
+                    <label class="form-check-label text-danger fw-bold fs-5" for="hasSepsis">ผู้ป่วยมีภาวะ Sepsis / Septic Shock</label>
+                </div>
+                <div id="sepsisSourceBox" class="mt-3 p-3 rounded" style="display: none; background-color: #fff5f5; border: 1px solid #f5c2c7;">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4"><label class="form-label text-danger fw-bold">ประเภท Sepsis *</label><select class="form-select border-danger" id="sepsisType"><option value="">-- เลือกประเภท --</option><option value="Primary">Primary Sepsis</option><option value="Secondary">Secondary Sepsis</option></select></div>
+                        <div class="col-md-8"><label class="form-label text-danger fw-bold">ระบุแหล่งติดเชื้อ</label><input type="text" class="form-control border-danger" id="sepsisSourceDetail"></div>
+                    </div>
+                    <h6 class="text-danger fw-bold border-bottom border-danger pb-2 mt-4">⏱️ Sepsis Management Bundle (ประเมินตามมาตรฐาน SSC)</h6>
+                    <div class="row g-2 mt-2">
+                        <div class="col-md-6"><div class="form-check"><input type="checkbox" class="form-check-input border-danger"><label class="form-check-label">เจาะ <span class="text-danger fw-bold">Hemoculture ก่อน</span> ให้ยา Antibiotic</label></div></div>
+                        <div class="col-md-6"><div class="form-check"><input type="checkbox" class="form-check-input border-danger"><label class="form-check-label">ได้รับ <span class="fw-bold">Crystalloid 30 mL/kg</span> ภายใน 3 ชม.</label></div></div>
+                        <div class="col-md-6"><div class="form-check"><input type="checkbox" class="form-check-input border-danger"><label class="form-check-label">เจาะวัดระดับ <span class="fw-bold">Lactate</span> ใน 1 ชม.</label></div></div>
+                        <div class="col-md-6"><div class="form-check"><input type="checkbox" class="form-check-input border-danger"><label class="form-check-label">ได้รับการจัดการต้นเหตุ <span class="fw-bold">(Source Control)</span> ภายใน 6-12 ชม.</label></div></div>
+                        <div class="col-md-6"><div class="form-check"><input type="checkbox" class="form-check-input border-danger"><label class="form-check-label">ได้รับ <span class="fw-bold">Antibiotic</span> ทางหลอดเลือดดำ ใน 1 ชม.</label></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row g-3 mt-1"><div class="col-md-12"><label class="form-label">สาเหตุที่เข้า ICU</label><input class="form-control" list="icuReasonList" id="icuReason"></div></div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-pills nav-fill" id="pills-tab" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-triss" type="button">1. คะแนน TRISS</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-apache" type="button">2. คะแนน APACHE II</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-devices" type="button">3. อุปกรณ์ & หัตถการ</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-discharge" type="button">4. ภาวะแทรกซ้อน & จำหน่าย</button></li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- ==========================================
+             TAB 1 : คะแนน TRISS (Trauma Score)
+        =========================================== -->
+        <div class="tab-pane fade show active" id="tab-triss">
+            <div class="card border-primary mb-4">
+                <div class="card-header bg-primary text-white fw-bold">
+                    คำนวณคะแนน TRISS (Trauma Score)
+                </div>
+                <div class="card-body bg-light">
+                    <!-- ข้อมูลพื้นฐานการบาดเจ็บ -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">ประเภทการบาดเจ็บ</label>
+                            <select class="form-select" id="traumaType" onchange="calcTRISS()">
+                                <option value="blunt">Blunt (กระแทก)</option>
+                                <option value="penetrating">Penetrating (ทะลุ)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- ข้อมูลสัญญาณชีพ (RTS) -->
+                    <h6 class="text-primary fw-bold border-bottom pb-2">สัญญาณชีพเบื้องต้น (RTS)</h6>
+                    <div class="row mb-4 g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">GCS (3-15)</label>
+                            <input type="number" class="form-control" id="er_gcs" onchange="calcTRISS()">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">SBP (mmHg)</label>
+                            <input type="number" class="form-control" id="er_sbp" onchange="calcTRISS()">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">RR (ครั้ง/นาที)</label>
+                            <input type="number" class="form-control" id="er_rr" onchange="calcTRISS()">
+                        </div>
+                    </div>
+
+                    <!-- ข้อมูลความรุนแรง (AIS) -->
+                    <h6 class="text-primary fw-bold border-bottom pb-2">ระดับความรุนแรง AIS</h6>
+                    <div class="row mb-3 g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Head & Neck</label>
+                            <input type="number" class="form-control ais-input" id="ais_head" onchange="calcTRISS()">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Face</label>
+                            <input type="number" class="form-control ais-input" id="ais_face" onchange="calcTRISS()">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Chest</label>
+                            <input type="number" class="form-control ais-input" id="ais_chest" onchange="calcTRISS()">
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label class="form-label small mb-1">Abdomen / Pelvic</label>
+                            <input type="number" class="form-control ais-input" id="ais_abdomen" onchange="calcTRISS()">
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label class="form-label small mb-1">Extremities</label>
+                            <input type="number" class="form-control ais-input" id="ais_extremities" onchange="calcTRISS()">
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label class="form-label small mb-1">External</label>
+                            <input type="number" class="form-control ais-input" id="ais_external" onchange="calcTRISS()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ส่วนกล่องแสดงผลคะแนนรวม TRISS -->
+            <div class="row text-center mt-4 mb-5">
+                <div class="col-md-4 mb-3">
+                    <div class="card border-primary" style="background-color: #f0f8ff;">
+                        <div class="card-body d-flex flex-column justify-content-center" style="height: 100px;">
+                            <div class="fw-bold text-dark">RTS Score</div>
+                            <h3 class="text-primary fw-bold mb-0" id="outRTS">0.00</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card border-primary" style="background-color: #f0f8ff;">
+                        <div class="card-body d-flex flex-column justify-content-center" style="height: 100px;">
+                            <div class="fw-bold text-dark">ISS Score</div>
+                            <h3 class="text-primary fw-bold mb-0" id="outISS">0</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card border-primary" style="background-color: #f0f8ff;">
+                        <div class="card-body d-flex flex-column justify-content-center" style="height: 100px;">
+                            <div class="fw-bold text-dark">% รอดชีวิต (TRISS)</div>
+                            <h3 class="text-primary fw-bold mb-0" id="outTRISS">0.00%</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- ปิดแท็บ 1 TRISS -->
+
+        <!-- ==========================================
+             TAB 2 : คะแนน APACHE II
+        =========================================== -->
+        <div class="tab-pane fade" id="tab-apache">
+            <div class="card border-success mb-4">
+                <div class="card-header bg-success text-white fw-bold">
+                    คำนวณคะแนน APACHE II (กรอกค่าที่แย่ที่สุดใน 24 ชม. แรกหลังรับเข้า ICU)
+                </div>
+                <div class="card-body bg-light">
+                    
+                    <!-- ประวัติโรคประจำตัว -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">ประวัติโรคประจำตัวรุนแรง (Chronic Health Status)</label>
+                            <select class="form-select" id="ap_chronic" onchange="calcAPACHE()">
+                                <option value="0">ไม่มี / ไม่เข้าเกณฑ์รุนแรง</option>
+                                <option value="2">ตับแข็ง / ภูมิคุ้มกันบกพร่อง (Elective surgery)</option>
+                                <option value="5">ตับแข็ง / ภูมิคุ้มกันบกพร่อง (Emergency surgery / Non-operative)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 1. สัญญาณชีพ -->
+                    <h6 class="text-success fw-bold border-bottom pb-2">สัญญาณชีพ (Vital Signs)</h6>
+                    <div class="row mb-4 g-2">
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Temp (°C)</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_temp" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">HR (/min)</label>
+                            <input type="number" class="form-control" id="ap_hr" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">RR (/min)</label>
+                            <input type="number" class="form-control" id="ap_rr" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">SBP (mmHg)</label>
+                            <input type="number" class="form-control" id="ap_sbp" oninput="calculateMAP()" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">DBP (mmHg)</label>
+                            <input type="number" class="form-control" id="ap_dbp" oninput="calculateMAP()" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">MAP (auto)</label>
+                            <input type="number" class="form-control bg-e9ecef" id="ap_map" readonly>
+                        </div>
+                    </div>
+
+                    <!-- 2. ก๊าซในเลือด (ABG) -->
+                    <h6 class="text-success fw-bold border-bottom pb-2">ก๊าซในเลือด (ABG)</h6>
+                    <div class="row mb-4 g-2">
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">FiO2 (%)</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_fio2" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">PaO2</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_pao2" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">PaCO2</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_paco2" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">pH</label>
+                            <input type="number" step="0.01" class="form-control" id="ap_ph" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Serum HCO3 (กรณีไม่มี ABG)</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_hco3" onchange="calcAPACHE()">
+                        </div>
+                    </div>
+
+                    <!-- 3. ผลแล็บ และความรู้สึกตัว -->
+                    <h6 class="text-success fw-bold border-bottom pb-2">ผลแล็บ และความรู้สึกตัว</h6>
+                    <div class="row mb-3 g-2 align-items-end">
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Sodium (Na)</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_na" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Potassium (K)</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_k" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Creatinine (Cr)</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_cr" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input border-danger" type="checkbox" id="ap_arf" onchange="calcAPACHE()">
+                                <label class="form-check-label text-danger small fw-bold" for="ap_arf">เป็นไตวายเฉียบพลัน (ARF)</label>
+                            </div>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small mb-1">Hct (%)</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_hct" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small mb-1">WBC</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_wbc" onchange="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">GCS (3-15)</label>
+                            <input type="number" class="form-control" id="ap_gcs" onchange="calcAPACHE()">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ส่วนกล่องแสดงผลคะแนนรวม (สีเหลือง) -->
+            <div class="row text-center mt-4 mb-5">
+                <div class="col-md-4 mb-3">
+                    <div class="card border-warning" style="background-color: #fff9e6;">
+                        <div class="card-body fw-bold d-flex flex-column justify-content-center" style="height: 100px;">
+                            <div class="text-start" style="margin: 0 auto;">
+                                MAP: <span id="outMAP">-</span><br>
+                                A-aDO2: <span id="outAaDO2">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card border-warning" style="background-color: #fff9e6;">
+                        <div class="card-body d-flex flex-column justify-content-center" style="height: 100px;">
+                            <div class="fw-bold text-dark">APACHE II Score</div>
+                            <h3 class="text-danger fw-bold mb-0" id="outAPACHE">0</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card border-warning" style="background-color: #fff9e6;">
+                        <div class="card-body d-flex flex-column justify-content-center" style="height: 100px;">
+                            <div class="fw-bold text-dark">คาดการณ์เสียชีวิต</div>
+                            <h3 class="text-danger fw-bold mb-0" id="outMortality">0.00%</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- ปิดแท็บ 2 APACHE -->
+
+        <!-- ==========================================
+             TAB 3 : อุปกรณ์ & หัตถการ
+        =========================================== -->
+        <div class="tab-pane fade" id="tab-devices">
+            
+            <!-- การใส่อุปกรณ์สายสวน -->
+            <div class="card mb-4" style="border-color: var(--sicu-primary);">
+                <div class="card-header text-white fw-bold" style="background-color: var(--sicu-primary);">
+                    การใส่อุปกรณ์สายสวน (Device Days)
+                </div>
+                <div class="card-body bg-light">
+                    
+                    <div class="mb-3 p-3 bg-white border rounded shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0" style="color: var(--sicu-primary);">ท่อช่วยหายใจ (ETT / TT)</h6>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addDeviceRow('ett-container')">+ เพิ่มรอบ</button>
+                        </div>
+                        <div id="ett-container"></div>
+                    </div>
+
+                    <div class="mb-3 p-3 bg-white border rounded shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0" style="color: var(--sicu-primary);">เครื่องช่วยหายใจ (Respirator)</h6>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addDeviceRow('vent-container')">+ เพิ่มรอบ</button>
+                        </div>
+                        <div id="vent-container"></div>
+                    </div>
+
+                    <div class="mb-3 p-3 bg-white border rounded shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0" style="color: var(--sicu-primary);">สายสวนปัสสาวะ (Foley's Cath)</h6>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addDeviceRow('foley-container')">+ เพิ่มรอบ</button>
+                        </div>
+                        <div id="foley-container"></div>
+                    </div>
+                    
+                    <div class="p-3 bg-white border rounded shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0" style="color: var(--sicu-primary);">สายสวนหลอดเลือดดำส่วนกลาง (Central Line)</h6>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addDeviceRow('cline-container')">+ เพิ่มรอบ</button>
+                        </div>
+                        <div id="cline-container"></div>
+                    </div>
+
+                    <div class="mt-3 p-3 bg-white border rounded shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0" style="color: var(--sicu-primary);">สายสวนหลอดเลือดดำส่วนปลาย (Peripheral IV)</h6>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addDeviceRow('piv-container')">+ เพิ่มรอบ</button>
+                        </div>
+                        <div id="piv-container"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ข้อมูลหัตถการและการผ่าตัด -->
+            <div class="card mb-4" style="border-color: var(--sicu-primary);">
+                <div class="card-header text-white fw-bold" style="background-color: var(--sicu-primary);">
+                    ข้อมูลหัตถการ และ แพทย์ผู้ดูแล
+                </div>
+                <div class="card-body bg-light">
+                    
+                    <div class="mb-4 p-3 bg-white border rounded shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="fw-bold mb-0" style="color: var(--sicu-primary);">ประวัติการผ่าตัด (Operative History)</h6>
+                            <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="addSurgeryRow()">+ เพิ่มการผ่าตัด</button>
+                        </div>
+                        <div id="surgery-container"></div>
+                    </div>
+
+                    <div class="row g-3 pt-2">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold" style="color: var(--sicu-primary);">แพทย์เจ้าของไข้</label>
+                            <input type="text" class="form-control" id="docOwner">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold" style="color: var(--sicu-primary);">แพทย์ร่วมดูแล</label>
+                            <input type="text" class="form-control" id="docSupport">
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div> <!-- ปิดแท็บ 3 อุปกรณ์ -->
+
+        <!-- ==========================================
+             TAB 4 : ภาวะแทรกซ้อน & จำหน่าย
+        =========================================== -->
+        <div class="tab-pane fade" id="tab-discharge">
+            
+            <!-- รายงานอุบัติการณ์ -->
+            <div class="card border-danger mb-4">
+                <div class="card-header bg-danger text-white fw-bold">
+                    รายงานอุบัติการณ์ & ภาวะแทรกซ้อนขณะอยู่ ICU
+                </div>
+                <div class="card-body bg-light">
+                    <p class="text-secondary mb-4 small">กรุณาทำเครื่องหมายหากผู้ป่วยเกิดภาวะแทรกซ้อนเหล่านี้ เพื่อนำไปจัดทำสรุปตัวชี้วัดคุณภาพ (QI) ของหอผู้ป่วย</p>
+                    
+                    <div class="row g-3 mb-3">
+                        <!-- แถวที่ 1 -->
+                        <div class="col-md-5">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_vap" value="VAP">
+                                <label class="form-check-label" for="comp_vap">VAP (ปอดอักเสบจากการใช้เครื่องช่วยหายใจ)</label>
+                            </div>
+                        </div>
+                        <div class="col-md">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_clabsi" value="CLABSI">
+                                <label class="form-check-label" for="comp_clabsi">CLABSI (ติดเชื้อจากสาย Central Line)</label>
+                            </div>
+                        </div>
+                        <div class="col-md">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_cauti" value="CAUTI">
+                                <label class="form-check-label" for="comp_cauti">CAUTI (ติดเชื้อจากสายสวนปัสสาวะ)</label>
+                            </div>
+                        </div>
+                        
+                        <!-- แถวที่ 2 -->
+                        <div class="col-md-5">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_extravasation" value="Extravasation">
+                                <label class="form-check-label" for="comp_extravasation">Extravasation (สารน้ำรั่วออกนอกหลอดเลือด)</label>
+                            </div>
+                        </div>
+                        <div class="col-md">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_phlebitis" value="Phlebitis">
+                                <label class="form-check-label" for="comp_phlebitis">Phlebitis (หลอดเลือดดำอักเสบ)</label>
+                            </div>
+                        </div>
+                        <div class="col-md">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_ssi" value="SSI">
+                                <label class="form-check-label" for="comp_ssi">SSI (การติดเชื้อที่แผลผ่าตัด)</label>
+                            </div>
+                        </div>
+                        
+                        <!-- แถวที่ 3 -->
+                        <div class="col-md-5">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_extubate" value="Extubation">
+                                <label class="form-check-label" for="comp_extubate">ETT เลื่อนหลุด (Unplanned Extubation)</label>
+                            </div>
+                        </div>
+                        <div class="col-md">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_ulcer" value="Ulcer">
+                                <label class="form-check-label" for="comp_ulcer">แผลกดทับ (Pressure Ulcer)</label>
+                            </div>
+                        </div>
+                        <div class="col-md">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger comp-check" type="checkbox" id="comp_adminerror" value="AdminError">
+                                <label class="form-check-label" for="comp_adminerror">Medication / Admin Error</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 pt-3 border-top border-danger border-opacity-25">
+                        <label class="form-label text-danger fw-bold">ภาวะแทรกซ้อนอื่นๆ (โปรดระบุ)</label>
+                        <input type="text" class="form-control border-danger" id="comp_other" placeholder="พิมพ์ภาวะแทรกซ้อนอื่นๆ ที่พบที่นี่...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- สรุปสถานะการจำหน่าย -->
+            <div class="card border-danger mb-4">
+                <div class="card-header bg-danger text-white fw-bold">
+                    สรุปสถานะการจำหน่ายออกจาก ICU
+                </div>
+                <div class="card-body bg-light">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label text-danger fw-bold">วันที่จำหน่าย *</label>
+                            <input type="date" class="form-control border-danger" id="icuOutDate">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-danger fw-bold">สถานะการจำหน่าย *</label>
+                            <select class="form-select border-danger" id="dischargeStatus">
+                                <option value="">-- เลือกสถานะ --</option>
+                                <option value="ย้าย">ย้าย (ย้ายไปหอผู้ป่วยอื่น)</option>
+                                <option value="จำหน่ายกลับบ้าน">จำหน่ายกลับบ้าน</option>
+                                <option value="Refer">Refer ไป รพ.อื่น</option>
+                                <option value="เสียชีวิต">เสียชีวิต</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">รายละเอียดปลายทาง</label>
+                            <input type="text" class="form-control" id="destinationDetail">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div> <!-- ปิดแท็บ 4 ภาวะแทรกซ้อน -->
+
+    </div> <!-- ปิด tab-content รวมของทุกแท็บ -->
+
+    <!-- ==========================================
+         ปุ่มบันทึกและลิงก์กลับหน้า Dashboard (อยู่นอกสุด)
+    =========================================== -->
+    <hr class="mt-5 mb-4 border-2">
+    <div class="text-center">
+        <button class="btn btn-primary btn-lg px-5 shadow-sm fw-bold" style="border-radius: 30px; font-size: 1.2rem; padding: 15px 40px;" onclick="savePatientData()">💾 บันทึกและอัปเดตเวชระเบียน</button>
+        <div class="mt-3"><a href="SICU_Logbook.html" class="text-secondary">กลับไปหน้าสมุดทะเบียน (Dashboard)</a></div>
+    </div>
+
+</div> <!-- ปิด container กรอบขาวใหญ่ของหน้าเว็บ -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    const supabaseUrl = 'https://aakyylpfusmwlsvksaim.supabase.co';
+    const supabaseKey = 'sb_publishable_LjzvHRqLIDSE8OQhEHJPVw_Lb5XL9T8';
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const editHN = urlParams.get('hn');
+
+    // ดักการทำงาน รอให้หน้าเว็บโหลดเสร็จก่อนค่อยเริ่มทำงาน ป้องกัน Race Condition
+    document.addEventListener("DOMContentLoaded", () => {
+        checkAuth();
+    });
+
+    async function checkAuth() {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) {
+            window.location.href = 'index.html';
+        } else if (editHN) {
+            loadPatientData(editHN); 
+        } else {
+            addDeviceRow('ett-container'); 
+            addDeviceRow('vent-container'); 
+            addDeviceRow('foley-container'); 
+            addDeviceRow('cline-container'); 
+            addDeviceRow('piv-container');
+            addDeviceRow('piv-container');
+            addSurgeryRow(); 
+        }
+    }
+
+    async function signOut() { await supabaseClient.auth.signOut(); window.location.href = 'index.html'; }
+
+    async function loadPatientData(hn) {
+        const { data, error } = await supabaseClient.from('patients').select('*').eq('hn', hn).single();
+        if (data) {
+            document.getElementById('hn').value = data.hn; document.getElementById('hn').readOnly = true; document.getElementById('hn').classList.add('bg-light');
+            document.getElementById('prefix').value = data.prefix || 'นาย'; document.getElementById('firstName').value = data.firstname || ''; document.getElementById('lastName').value = data.lastname || '';
+            document.getElementById('age').value = data.age || ''; document.getElementById('address').value = data.address || ''; document.getElementById('icuInDate').value = data.icu_in_date || '';
+            document.getElementById('admType').value = data.adm_type || ''; document.getElementById('admFrom').value = data.adm_from || ''; document.getElementById('diseaseGroup').value = data.disease_group || '';
+            document.getElementById('primaryDiagnosis').value = data.primary_diagnosis || '';
+            
+            document.getElementById('hasSepsis').checked = data.has_sepsis; toggleSepsisDetail();
+            if(data.has_sepsis) { document.getElementById('sepsisType').value = data.sepsis_type || ''; document.getElementById('sepsisSourceDetail').value = data.sepsis_source || ''; }
+
+            document.getElementById('icuReason').value = data.icu_reason || ''; document.getElementById('docOwner').value = data.doctor_owner || ''; document.getElementById('docSupport').value = data.doctor_support || '';
+            document.getElementById('icuOutDate').value = data.discharge_date || ''; document.getElementById('dischargeStatus').value = (data.status === 'กำลังรักษา (In ICU)') ? '' : data.status;
+            document.getElementById('destinationDetail').value = data.destination || '';
+            
+            if(data.triss_score) document.getElementById('outTRISS').innerText = data.triss_score; if(data.apache_score) document.getElementById('outAPACHE').innerText = data.apache_score;
+
+            if (data.complication) {
+                const compStr = data.complication;
+                document.querySelectorAll('.comp-check').forEach(cb => {
+                    if(compStr.includes(cb.value)) cb.checked = true;
+                });
+                const otherMatch = compStr.match(/Other: (.*)/);
+                if (otherMatch) document.getElementById('comp_other').value = otherMatch[1];
+            }
+
+            if (data.surgery) {
+                document.getElementById('surgery-container').innerHTML = ''; 
+                data.surgery.split('\n').forEach(s => { const parts = s.split(' : '); addSurgeryRow(parts[0], parts[1]); });
+            } else { addSurgeryRow(); }
+            
+            if (data.device_records) {
+                document.getElementById('ett-container').innerHTML = ''; document.getElementById('vent-container').innerHTML = ''; document.getElementById('foley-container').innerHTML = ''; document.getElementById('cline-container').innerHTML = ''; document.getElementById('piv-container').innerHTML = '';
+                try {
+                    let devs = JSON.parse(data.device_records);
+                    if(devs.ett && devs.ett.length > 0) devs.ett.forEach(d => addDeviceRow('ett-container', d.on, d.off)); else addDeviceRow('ett-container');
+                    if(devs.vent && devs.vent.length > 0) devs.vent.forEach(d => addDeviceRow('vent-container', d.on, d.off)); else addDeviceRow('vent-container');
+                    if(devs.foley && devs.foley.length > 0) devs.foley.forEach(d => addDeviceRow('foley-container', d.on, d.off)); else addDeviceRow('foley-container');
+                    if(devs.cline && devs.cline.length > 0) devs.cline.forEach(d => addDeviceRow('cline-container', d.on, d.off)); else addDeviceRow('cline-container');
+                    if(devs.piv && devs.piv.length > 0) devs.piv.forEach(d => addDeviceRow('piv-container', d.on, d.off)); else addDeviceRow('piv-container');
+                } catch(e) {}
+            } else { addDeviceRow('ett-container'); addDeviceRow('vent-container'); addDeviceRow('foley-container'); addDeviceRow('cline-container'); }
+        }
+    }
+
+    let currentTargetId = '';
+    function triggerScan(targetId) { currentTargetId = targetId; document.getElementById('image-uploader').click(); }
+    async function processImage(input) {
+        if (input.files && input.files[0]) {
+            document.getElementById('ocr-overlay').style.display = 'flex';
+            try { const result = await Tesseract.recognize(input.files[0], 'tha+eng'); document.getElementById(currentTargetId).value = result.data.text.replace(/\n/g, ' ').trim(); } 
+            catch (err) { alert("เกิดข้อผิดพลาดในการสแกนภาพ"); } finally { document.getElementById('ocr-overlay').style.display = 'none'; input.value = ''; }
+        }
+    }
+
+    function toggleSepsisDetail() { document.getElementById('sepsisSourceBox').style.display = document.getElementById('hasSepsis').checked ? 'block' : 'none'; }
+
+    // สูตรคำนวณ TRISS แบบเต็มรูปแบบ
+    function calcTRISS() {
+        let gcs = parseInt(document.getElementById('er_gcs').value) || 0;
+        let sbp = parseInt(document.getElementById('er_sbp').value) || 0;
+        let rr = parseInt(document.getElementById('er_rr').value) || 0;
+        let rts = (gcs>0||sbp>0||rr>0) ? ((0.9368*(gcs>=13?4:gcs>=9?3:gcs>=6?2:gcs>=4?1:0)) + (0.7326*(sbp>89?4:sbp>76?3:sbp>49?2:sbp>0?1:0)) + (0.2908*((rr>10&&rr<30)?4:rr>29?3:(rr>5&&rr<10)?2:(rr>0&&rr<6)?1:0))) : 0;
+        document.getElementById('outRTS').innerText = rts.toFixed(2);
+        
+        let aisVals = Array.from(document.querySelectorAll('.ais-input')).map(i=>parseInt(i.value)||0).sort((a,b)=>b-a);
+        let iss = (aisVals[0]*aisVals[0]) + (aisVals[1]*aisVals[1]) + (aisVals[2]*aisVals[2]);
+        document.getElementById('outISS').innerText = iss;
+        
+        let b = (document.getElementById('traumaType').value==='blunt') ? -0.4499+(0.8085*rts)-(0.0835*iss)-(1.7430*((parseInt(document.getElementById('age').value)||0)>54?1:0)) : -2.5355+(0.9934*rts)-(0.0651*iss)-(1.1360*((parseInt(document.getElementById('age').value)||0)>54?1:0));
+        document.getElementById('outTRISS').innerText = (rts>0||iss>0) ? ((1/(1+Math.exp(-b)))*100).toFixed(2)+'%' : '0.00%';
+    }
+
+    // สูตรคำนวณ APACHE II แบบเต็มรูปแบบ
+    function calcAPACHE() {
+        let score = 0;
+        let age = parseInt(document.getElementById('age').value) || 0;
+        if(age >= 75) score += 6; else if(age >= 65) score += 5; else if(age >= 55) score += 3; else if(age >= 45) score += 2;
+
+        score += parseInt(document.getElementById('ap_chronic').value) || 0;
+
+        let temp = parseFloat(document.getElementById('ap_temp').value);
+        if(!isNaN(temp)) {
+            if(temp>=41) score+=4; else if(temp>=39) score+=3; else if(temp>=38.5) score+=1; 
+            else if(temp>=36) score+=0; else if(temp>=34) score+=1; else if(temp>=32) score+=2; 
+            else if(temp>=30) score+=3; else score+=4;
+        }
+
+        let sbp = parseFloat(document.getElementById('ap_sbp').value);
+        let dbp = parseFloat(document.getElementById('ap_dbp').value);
+        let map = null;
+        if(!isNaN(sbp) && !isNaN(dbp)) {
+            map = (sbp + (2*dbp))/3;
+            document.getElementById('outMAP').innerText = map.toFixed(1);
+            if(map>=160) score+=4; else if(map>=130) score+=3; else if(map>=110) score+=2; 
+            else if(map>=70) score+=0; else if(map>=50) score+=2; else score+=4;
+        }
+
+        let hr = parseFloat(document.getElementById('ap_hr').value);
+        if(!isNaN(hr)) {
+            if(hr>=180) score+=4; else if(hr>=140) score+=3; else if(hr>=110) score+=2; 
+            else if(hr>=70) score+=0; else if(hr>=55) score+=2; else if(hr>=40) score+=3; else score+=4;
+        }
+
+        let rr = parseFloat(document.getElementById('ap_rr').value);
+        if(!isNaN(rr)) {
+            if(rr>=50) score+=4; else if(rr>=35) score+=3; else if(rr>=25) score+=1; 
+            else if(rr>=12) score+=0; else if(rr>=10) score+=1; else if(rr>=6) score+=2; else score+=4;
+        }
+
+        let gcs = parseFloat(document.getElementById('ap_gcs').value);
+        if(!isNaN(gcs)) score += (15 - gcs);
+
+        let cr = parseFloat(document.getElementById('ap_cr').value);
+        let arf = document.getElementById('ap_arf').checked;
+        if(!isNaN(cr)) {
+            let cr_score = 0;
+            if(cr>=3.5) cr_score=4; else if(cr>=1.5) cr_score=3; else if(cr>=0.6) cr_score=0; else cr_score=2;
+            if(arf) cr_score *= 2;
+            score += cr_score;
+        }
+
+        let fio2 = parseFloat(document.getElementById('ap_fio2').value);
+        let pao2 = parseFloat(document.getElementById('ap_pao2').value);
+        let paco2 = parseFloat(document.getElementById('ap_paco2').value);
+        
+        if(!isNaN(fio2) && !isNaN(pao2)) {
+            if(fio2 >= 50 && !isNaN(paco2)) {
+                let aado2 = (713 * (fio2/100)) - (paco2/0.8) - pao2;
+                document.getElementById('outAaDO2').innerText = aado2.toFixed(1);
+                if(aado2>=500) score+=4; else if(aado2>=350) score+=3; else if(aado2>=200) score+=2; else score+=0;
+            } else {
+                document.getElementById('outAaDO2').innerText = 'N/A (<50% FiO2)';
+                if(pao2>70) score+=0; else if(pao2>60) score+=1; else if(pao2>55) score+=3; else score+=4;
+            }
+        }
+
+        document.getElementById('outAPACHE').innerText = score;
+        let risk = Math.exp(-3.517 + (score * 0.146)) / (1 + Math.exp(-3.517 + (score * 0.146)));
+        document.getElementById('outMortality').innerText = (risk * 100).toFixed(2) + "%";
+    }
+
+    function addDeviceRow(containerId, defaultOn = '', defaultOff = '') {
+        const container = document.getElementById(containerId);
+        const rowId = 'row-' + Date.now() + Math.random().toString(36).substr(2, 5);
+        const html = `
+            <div class="row g-2 align-items-center mb-2 device-row" id="${rowId}">
+                <div class="col-md-5"><div class="input-group input-group-sm"><span class="input-group-text bg-light text-secondary fw-bold">On</span><input type="date" class="form-control dev-on" value="${defaultOn}"></div></div>
+                <div class="col-md-5"><div class="input-group input-group-sm"><span class="input-group-text bg-light text-secondary fw-bold">Off</span><input type="date" class="form-control dev-off" value="${defaultOff}"></div></div>
+                <div class="col-md-2 text-end"><button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="document.getElementById('${rowId}').remove()">ลบ</button></div>
+            </div>`;
+        container.insertAdjacentHTML('beforeend', html);
+    }
+
+    function addSurgeryRow(defaultDate = '', defaultDetail = '') {
+        const container = document.getElementById('surgery-container');
+        const uniqueId = Date.now() + Math.random().toString(36).substr(2, 5);
+        const html = `
+            <div class="row g-3 align-items-start mb-3 pb-3 border-bottom surg-entry" id="surg-row-${uniqueId}">
+                <div class="col-md-3"><label class="form-label text-primary">วันที่ผ่าตัด</label><input type="date" class="form-control surg-date" value="${defaultDate}"></div>
+                <div class="col-md-7"><label class="form-label text-primary">การผ่าตัดที่ได้รับ</label><textarea class="form-control surg-detail" id="surg-text-${uniqueId}" rows="2">${defaultDetail}</textarea></div>
+                <div class="col-md-2 text-end d-flex flex-column gap-2 mt-4"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="triggerScan('surg-text-${uniqueId}')">📷 สแกนภาพ</button><button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('surg-row-${uniqueId}').remove()">ลบ</button></div>
+            </div>`;
+        container.insertAdjacentHTML('beforeend', html);
+    }
+
+    async function savePatientData() {
+        const hn = document.getElementById('hn').value;
+        if (!hn) { alert('กรุณากรอก HN ผู้ป่วยก่อนบันทึก!'); return; }
+
+        let surgeries = [];
+        document.querySelectorAll('#surgery-container .surg-entry').forEach(row => {
+            let date = row.querySelector('.surg-date').value, detail = row.querySelector('.surg-detail').value;
+            if(date || detail) surgeries.push(`${date} : ${detail}`);
+        });
+
+        let deviceRecords = { ett: [], vent: [], foley: [], cline: [], piv: [] };
+        document.querySelectorAll('#ett-container .device-row').forEach(r => { let on = r.querySelector('.dev-on').value, off = r.querySelector('.dev-off').value; if(on) deviceRecords.ett.push({on, off}); });
+        document.querySelectorAll('#vent-container .device-row').forEach(r => { let on = r.querySelector('.dev-on').value, off = r.querySelector('.dev-off').value; if(on) deviceRecords.vent.push({on, off}); });
+        document.querySelectorAll('#foley-container .device-row').forEach(r => { let on = r.querySelector('.dev-on').value, off = r.querySelector('.dev-off').value; if(on) deviceRecords.foley.push({on, off}); });
+        document.querySelectorAll('#cline-container .device-row').forEach(r => { let on = r.querySelector('.dev-on').value, off = r.querySelector('.dev-off').value; if(on) deviceRecords.cline.push({on, off}); });
+        document.querySelectorAll('#piv-container .device-row').forEach(r => { let on = r.querySelector('.dev-on').value, off = r.querySelector('.dev-off').value; if(on) deviceRecords.piv.push({on, off}); });
+        
+        let comps = [];
+        document.querySelectorAll('.comp-check:checked').forEach(cb => comps.push(cb.value));
+        const compOther = document.getElementById('comp_other').value;
+        if(compOther) comps.push('Other: ' + compOther);
+
+        let dStatus = document.getElementById('dischargeStatus').value;
+        // ดึงข้อมูล 4 ช่องมาต่อกัน
+        let houseNo = document.getElementById('addr_detail').value.trim();
+        let tambon = document.getElementById('addr_tambon').value;
+        let amphoe = document.getElementById('addr_amphoe').value;
+        let province = document.getElementById('addr_province').value;
+
+        let fullAddress = houseNo;
+        if (tambon) fullAddress += " ต." + tambon;
+        if (amphoe) fullAddress += " อ." + amphoe;
+        if (province) fullAddress += " จ." + province;
+        const patientData = {
+            hn: hn, prefix: document.getElementById('prefix').value, firstname: document.getElementById('firstName').value, lastname: document.getElementById('lastName').value,
+            age: parseInt(document.getElementById('age').value) || null, address: fullAddress, icu_in_date: document.getElementById('icuInDate').value || null,
+            adm_type: document.getElementById('admType').value, adm_from: document.getElementById('admFrom').value, disease_group: document.getElementById('diseaseGroup').value,
+            primary_diagnosis: document.getElementById('primaryDiagnosis').value, has_sepsis: document.getElementById('hasSepsis').checked, sepsis_type: document.getElementById('sepsisType').value,
+            sepsis_source: document.getElementById('sepsisSourceDetail').value, icu_reason: document.getElementById('icuReason').value, doctor_owner: document.getElementById('docOwner').value, doctor_support: document.getElementById('docSupport').value,
+            triss_score: document.getElementById('outTRISS').innerText, apache_score: document.getElementById('outAPACHE').innerText, surgery: surgeries.join('\n'), device_records: JSON.stringify(deviceRecords),
+            complication: comps.join(', '), 
+            status: dStatus ? dStatus : 'กำลังรักษา (In ICU)', discharge_date: document.getElementById('icuOutDate').value || null, destination: document.getElementById('destinationDetail').value
+        };
+
+        const { data, error } = await supabaseClient.from('patients').upsert([patientData]);
+        if (error) { alert('❌ บันทึกข้อมูลไม่สำเร็จ: ' + error.message); } else { alert('✅ อัปเดตเวชระเบียนผู้ป่วยสำเร็จ!'); window.location.href = 'SICU_Logbook.html'; }
+    }
+    const thaiProvinces = [
+    "กระบี่", "กรุงเทพมหานคร", "กาญจนบุรี", "กาฬสินธุ์", "กำแพงเพชร", "ขอนแก่น", "จันทบุรี", "ฉะเชิงเทรา", "ชลบุรี", "ชัยนาท", "ชัยภูมิ", "ชุมพร", "เชียงราย", "เชียงใหม่", "ตรัง", "ตราด", "ตาก", "นครนายก", "นครปฐม", "นครพนม", "นครราชสีมา", "นครศรีธรรมราช", "นครสวรรค์", "นนทบุรี", "นราธิวาส", "น่าน", "บึงกาฬ", "บุรีรัมย์", "ปทุมธานี", "ประจวบคีรีขันธ์", "ปราจีนบุรี", "ปัตตานี", "พระนครศรีอยุธยา", "พะเยา", "พังงา", "พัทลุง", "พิจิตร", "พิษณุโลก", "เพชรบุรี", "เพชรบูรณ์", "แพร่", "ภูเก็ต", "มหาสารคาม", "มุกดาหาร", "แม่ฮ่องสอน", "ยโสธร", "ยะลา", "ร้อยเอ็ด", "ระนอง", "ระยอง", "ราชบุรี", "ลพบุรี", "ลำปาง", "ลำพูน", "เลย", "ศรีสะเกษ", "สกลนคร", "สงขลา", "สตูล", "สมุทรปราการ", "สมุทรสงคราม", "สมุทรสาคร", "สระแก้ว", "สระบุรี", "สิงห์บุรี", "สุโขทัย", "สุพรรณบุรี", "สุราษฎร์ธานี", "สุรินทร์", "หนองคาย", "หนองบัวลำภู", "อ่างทอง", "อำนาจเจริญ", "อุดรธานี", "อุตรดิตถ์", "อุทัยธานี", "อุบลราชธานี"
+];
+
+let currentProvinceData = [];
+
+document.addEventListener("DOMContentLoaded", () => {
+    let provSelect = document.getElementById('addr_province');
+    if (provSelect) {
+        provSelect.innerHTML = '<option value="">-- เลือกจังหวัด --</option>';
+        thaiProvinces.forEach(p => provSelect.add(new Option(p, p)));
+        // ตั้งค่าเริ่มต้นเป็น อุดรธานี แล้วดึงอำเภอจาก Supabase ทันที
+        provSelect.value = "อุดรธานี";
+        updateAmphoe();
+    }
+});
+
+// ดึงอำเภอและตำบลจากตาราง thai_addresses ใน Supabase ของเราเอง
+async function updateAmphoe() {
+    let prov = document.getElementById('addr_province').value;
+    let ampSelect = document.getElementById('addr_amphoe');
+    let tamSelect = document.getElementById('addr_tambon');
+
+    ampSelect.innerHTML = '<option value="">-- กำลังโหลดอำเภอ... --</option>';
+    tamSelect.innerHTML = '<option value="">-- เลือกตำบล --</option>';
+    ampSelect.disabled = true;
+    tamSelect.disabled = true;
+
+    if (!prov) {
+        ampSelect.innerHTML = '<option value="">-- เลือกอำเภอ --</option>';
+        return;
+    }
+
+    const { data, error } = await supabaseClient
+        .from('thai_addresses')
+        .select('amphoe, tambon')
+        .eq('province', prov);
+
+    if (error) {
+        console.error(error);
+        ampSelect.innerHTML = '<option value="">-- โหลดไม่สำเร็จ --</option>';
+        return;
+    }
+
+    currentProvinceData = data || [];
+    let amphoes = [...new Set(currentProvinceData.map(item => item.amphoe))].sort((a, b) => a.localeCompare(b, 'th'));
+
+    ampSelect.innerHTML = '<option value="">-- เลือกอำเภอ --</option>';
+    amphoes.forEach(a => ampSelect.add(new Option(a, a)));
+    ampSelect.disabled = false;
+}
+
+// กรองเฉพาะตำบลในอำเภอที่เลือก (ไม่ต้องโหลดใหม่เพราะดึงมาเก็บไว้แล้ว)
+function updateTambon() {
+    let amp = document.getElementById('addr_amphoe').value;
+    let tamSelect = document.getElementById('addr_tambon');
+
+    tamSelect.innerHTML = '<option value="">-- เลือกตำบล --</option>';
+    tamSelect.disabled = true;
+
+    if (amp && currentProvinceData.length > 0) {
+        let tambons = [...new Set(
+            currentProvinceData
+                .filter(item => item.amphoe === amp)
+                .map(item => item.tambon)
+        )].sort((a, b) => a.localeCompare(b, 'th'));
+
+        tambons.forEach(t => tamSelect.add(new Option(t, t)));
+        tamSelect.disabled = false;
+    }
+}
+// คำนวณ MAP อัตโนมัติเมื่อมีการพิมพ์ SBP หรือ DBP
+function calculateMAP() {
+    let sbp = parseFloat(document.getElementById('ap_sbp').value);
+    let dbp = parseFloat(document.getElementById('ap_dbp').value);
+    let mapField = document.getElementById('ap_map');
+    
+    if (!isNaN(sbp) && !isNaN(dbp)) {
+        let map = (sbp + (2 * dbp)) / 3;
+        mapField.value = map.toFixed(2); // ปัดทศนิยม 2 ตำแหน่ง
+    } else {
+        mapField.value = "";
+    }
+}
+</script>
+</body>
+</html>
