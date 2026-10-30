@@ -41,7 +41,7 @@
     <div class="global-header">
         <h5 class="text-primary mb-3 border-bottom pb-2 fw-bold">ข้อมูลเบื้องต้นผู้ป่วย (Patient Identification)</h5>
         <div class="row g-3">
-            <div class="col-md-2"><label class="form-label text-danger">HN *</label><input type="text" class="form-control border-danger" id="hn"></div>
+            <div class="col-md-2"><label class="form-label text-danger">HN *</label><input type="text" class="form-control border-danger" id="hn" onchange="checkReadmission(this.value)"></div>
             <div class="col-md-2"><label class="form-label">คำนำหน้า</label><select class="form-select" id="prefix"><option>นาย</option><option>นาง</option><option>นางสาว</option><option>ด.ช.</option><option>ด.ญ.</option></select></div>
             <div class="col-md-3"><label class="form-label">ชื่อ</label><input type="text" class="form-control" id="firstName"></div>
             <div class="col-md-3"><label class="form-label">สกุล</label><input type="text" class="form-control" id="lastName"></div>
@@ -610,25 +610,42 @@
     async function loadPatientData(hn) {
         const { data, error } = await supabaseClient.from('patients').select('*').eq('hn', hn).single();
         if (data) {
-            document.getElementById('hn').value = data.hn; document.getElementById('hn').readOnly = true; document.getElementById('hn').classList.add('bg-light');
-            document.getElementById('prefix').value = data.prefix || 'นาย'; document.getElementById('firstName').value = data.firstname || ''; document.getElementById('lastName').value = data.lastname || '';
-            document.getElementById('age').value = data.age || ''; document.getElementById('address').value = data.address || ''; document.getElementById('icuInDate').value = data.icu_in_date || '';
-            document.getElementById('admType').value = data.adm_type || ''; document.getElementById('admFrom').value = data.adm_from || ''; document.getElementById('diseaseGroup').value = data.disease_group || '';
+            document.getElementById('hn').value = data.hn; 
+            document.getElementById('hn').readOnly = true; 
+            document.getElementById('hn').classList.add('bg-light');
+            document.getElementById('prefix').value = data.prefix || 'นาย'; 
+            document.getElementById('firstName').value = data.firstname || ''; 
+            document.getElementById('lastName').value = data.lastname || '';
+            document.getElementById('age').value = data.age || ''; 
+
+            // ดึงข้อมูลวันเข้า การวินิจฉัย และข้อมูลการรักษาทั้งหมดขึ้นมาก่อน
+            document.getElementById('icuInDate').value = data.icu_in_date || '';
+            document.getElementById('admType').value = data.adm_type || ''; 
+            document.getElementById('admFrom').value = data.adm_from || ''; 
+            document.getElementById('diseaseGroup').value = data.disease_group || '';
             document.getElementById('primaryDiagnosis').value = data.primary_diagnosis || '';
             
-            document.getElementById('hasSepsis').checked = data.has_sepsis; toggleSepsisDetail();
-            if(data.has_sepsis) { document.getElementById('sepsisType').value = data.sepsis_type || ''; document.getElementById('sepsisSourceDetail').value = data.sepsis_source || ''; }
+            document.getElementById('hasSepsis').checked = data.has_sepsis; 
+            toggleSepsisDetail();
+            if (data.has_sepsis) { 
+                document.getElementById('sepsisType').value = data.sepsis_type || ''; 
+                document.getElementById('sepsisSourceDetail').value = data.sepsis_source || ''; 
+            }
 
-            document.getElementById('icuReason').value = data.icu_reason || ''; document.getElementById('docOwner').value = data.doctor_owner || ''; document.getElementById('docSupport').value = data.doctor_support || '';
-            document.getElementById('icuOutDate').value = data.discharge_date || ''; document.getElementById('dischargeStatus').value = (data.status === 'กำลังรักษา (In ICU)') ? '' : data.status;
+            document.getElementById('icuReason').value = data.icu_reason || ''; 
+            document.getElementById('docOwner').value = data.doctor_owner || ''; 
+            document.getElementById('docSupport').value = data.doctor_support || '';
+            document.getElementById('icuOutDate').value = data.discharge_date || ''; 
+            document.getElementById('dischargeStatus').value = (data.status === 'กำลังรักษา (In ICU)') ? '' : (data.status || '');
             document.getElementById('destinationDetail').value = data.destination || '';
             
-            if(data.triss_score) document.getElementById('outTRISS').innerText = data.triss_score; if(data.apache_score) document.getElementById('outAPACHE').innerText = data.apache_score;
+            if (data.triss_score) document.getElementById('outTRISS').innerText = data.triss_score; 
+            if (data.apache_score) document.getElementById('outAPACHE').innerText = data.apache_score;
 
             if (data.complication) {
                 const compStr = data.complication;
                 document.querySelectorAll('.comp-check').forEach(cb => {
-                    if(compStr.includes(cb.value)) cb.checked = true;
+                    if (compStr.includes(cb.value)) cb.checked = true;
                 });
                 const otherMatch = compStr.match(/Other: (.*)/);
                 if (otherMatch) document.getElementById('comp_other').value = otherMatch[1];
@@ -636,20 +653,62 @@
 
             if (data.surgery) {
                 document.getElementById('surgery-container').innerHTML = ''; 
-                data.surgery.split('\n').forEach(s => { const parts = s.split(' : '); addSurgeryRow(parts[0], parts[1]); });
-            } else { addSurgeryRow(); }
+                data.surgery.split('\n').forEach(s => { 
+                    const parts = s.split(' : '); 
+                    addSurgeryRow(parts[0] || '', parts[1] || ''); 
+                });
+            } else { 
+                addSurgeryRow(); 
+            }
             
             if (data.device_records) {
-                document.getElementById('ett-container').innerHTML = ''; document.getElementById('vent-container').innerHTML = ''; document.getElementById('foley-container').innerHTML = ''; document.getElementById('cline-container').innerHTML = ''; document.getElementById('piv-container').innerHTML = '';
+                document.getElementById('ett-container').innerHTML = ''; 
+                document.getElementById('vent-container').innerHTML = ''; 
+                document.getElementById('foley-container').innerHTML = ''; 
+                document.getElementById('cline-container').innerHTML = ''; 
+                document.getElementById('piv-container').innerHTML = '';
                 try {
                     let devs = JSON.parse(data.device_records);
-                    if(devs.ett && devs.ett.length > 0) devs.ett.forEach(d => addDeviceRow('ett-container', d.on, d.off)); else addDeviceRow('ett-container');
-                    if(devs.vent && devs.vent.length > 0) devs.vent.forEach(d => addDeviceRow('vent-container', d.on, d.off)); else addDeviceRow('vent-container');
-                    if(devs.foley && devs.foley.length > 0) devs.foley.forEach(d => addDeviceRow('foley-container', d.on, d.off)); else addDeviceRow('foley-container');
-                    if(devs.cline && devs.cline.length > 0) devs.cline.forEach(d => addDeviceRow('cline-container', d.on, d.off)); else addDeviceRow('cline-container');
-                    if(devs.piv && devs.piv.length > 0) devs.piv.forEach(d => addDeviceRow('piv-container', d.on, d.off)); else addDeviceRow('piv-container');
+                    if (devs.ett && devs.ett.length > 0) devs.ett.forEach(d => addDeviceRow('ett-container', d.on, d.off)); else addDeviceRow('ett-container');
+                    if (devs.vent && devs.vent.length > 0) devs.vent.forEach(d => addDeviceRow('vent-container', d.on, d.off)); else addDeviceRow('vent-container');
+                    if (devs.foley && devs.foley.length > 0) devs.foley.forEach(d => addDeviceRow('foley-container', d.on, d.off)); else addDeviceRow('foley-container');
+                    if (devs.cline && devs.cline.length > 0) devs.cline.forEach(d => addDeviceRow('cline-container', d.on, d.off)); else addDeviceRow('cline-container');
+                    if (devs.piv && devs.piv.length > 0) devs.piv.forEach(d => addDeviceRow('piv-container', d.on, d.off)); else addDeviceRow('piv-container');
                 } catch(e) {}
-            } else { addDeviceRow('ett-container'); addDeviceRow('vent-container'); addDeviceRow('foley-container'); addDeviceRow('cline-container'); }
+            } else { 
+                addDeviceRow('ett-container'); 
+                addDeviceRow('vent-container'); 
+                addDeviceRow('foley-container'); 
+                addDeviceRow('cline-container'); 
+                addDeviceRow('piv-container');
+            }
+
+            // แยกข้อมูลที่อยู่กลับลง 4 ช่อง (บ้านเลขที่, จังหวัด, อำเภอ, ตำบล)
+            const addr = data.address || '';
+            const match = addr.match(/^(.*?)(?:\s+ต\.([^\s]+))?(?:\s+อ\.([^\s]+))?(?:\s+จ\.([^\s]+))?$/);
+            if (match && match[4]) {
+                document.getElementById('addr_detail').value = (match[1] || '').trim();
+                document.getElementById('addr_province').value = match[4];
+                await updateAmphoe();
+                if (match[3]) {
+                    document.getElementById('addr_amphoe').value = match[3];
+                    updateTambon();
+                }
+                if (match[2]) {
+                    document.getElementById('addr_tambon').value = match[2];
+                }
+                // กรณีชื่ออำเภอ/ตำบลในข้อมูลเก่าไม่ตรงกับตัวเลือก ให้เก็บข้อความเต็มไว้ในช่องแรกเพื่อกันข้อมูลแหว่ง
+                if ((match[3] && document.getElementById('addr_amphoe').value !== match[3]) ||
+                    (match[2] && document.getElementById('addr_tambon').value !== match[2])) {
+                    document.getElementById('addr_detail').value = addr;
+                    document.getElementById('addr_province').value = '';
+                    await updateAmphoe();
+                }
+            } else {
+                document.getElementById('addr_detail').value = addr;
+                document.getElementById('addr_province').value = '';
+                await updateAmphoe();
+            }
         }
     }
 
@@ -903,6 +962,51 @@ function calculateMAP() {
         mapField.value = map.toFixed(2); // ปัดทศนิยม 2 ตำแหน่ง
     } else {
         mapField.value = "";
+    }
+}
+// ฟังก์ชันตรวจสอบผู้ป่วยรับซ้ำ (Readmission) อัตโนมัติเมื่อพิมพ์ HN
+async function checkReadmission(inputHn) {
+    // ทำงานเฉพาะตอนกด "+ รับผู้ป่วยใหม่" เท่านั้น (ถ้าคลิกเข้ามาแก้ไขข้อมูลเดิมจะไม่ทำงานซ้ำ)
+    if (editHN || !inputHn) return;
+
+    // ตัดเลขรอบท้าย HN ออกก่อน (เผื่อผู้ใช้พิมพ์ติดมา) เพื่อหา HN ต้นฉบับ
+    const baseHn = inputHn.trim().split('-')[0];
+
+    // ค้นหาในฐานข้อมูลว่ามี HN นี้หรือยัง
+    const { data, error } = await supabaseClient
+        .from('patients')
+        .select('*')
+        .or(`hn.eq.${baseHn},hn.ilike.${baseHn}-%`);
+
+    if (data && data.length > 0) {
+        const nextRound = data.length + 1;
+        const newHnCode = `${baseHn}-${nextRound}`;
+        const lastRecord = data[data.length - 1];
+
+        const confirmReadmit = confirm(
+            `⚠️ พบประวัติผู้ป่วย HN: ${baseHn} (${lastRecord.prefix || ''}${lastRecord.firstname || ''} ${lastRecord.lastname || ''}) ในระบบแล้วจำนวน ${data.length} ครั้ง\n\n` +
+            `• กด "ตกลง (OK)" เพื่อเปิดใบรับใหม่รอบที่ ${nextRound} (รหัส ${newHnCode}) โดยดึงชื่อและที่อยู่เดิมมาให้อัตโนมัติ\n` +
+            `• กด "ยกเลิก (Cancel)" เพื่อเข้าไปแก้ไขข้อมูลการนอนรักษาครั้งล่าสุดแทน`
+        );
+
+        if (confirmReadmit) {
+            // ตั้งรหัส HN ใหม่เป็น รอบที่ 2, 3, ... เพื่อไม่ให้เซฟทับรอบเก่า
+            document.getElementById('hn').value = newHnCode;
+
+            // ดึงเฉพาะข้อมูลพื้นฐาน (ชื่อ-สกุล-อายุ-ที่อยู่) มาใส่ให้ ไม่ต้องพิมพ์ใหม่
+            document.getElementById('prefix').value = lastRecord.prefix || 'นาย';
+            document.getElementById('firstName').value = lastRecord.firstname || '';
+            document.getElementById('lastName').value = lastRecord.lastname || '';
+            document.getElementById('age').value = lastRecord.age || '';
+
+            // ดึงที่อยู่เดิมมาใส่ช่องบ้านเลขที่/รายละเอียด
+            document.getElementById('addr_detail').value = lastRecord.address || '';
+            document.getElementById('addr_province').value = '';
+            await updateAmphoe();
+        } else {
+            // ถ้าต้องการแก้ข้อมูลรอบเดิม ให้พาไปหน้าแก้ไขของรอบล่าสุดทันที
+            window.location.href = `SICU.html?hn=${encodeURIComponent(lastRecord.hn)}`;
+        }
     }
 }
 </script>
