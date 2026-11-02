@@ -609,81 +609,87 @@
 
     async function loadPatientData(hn) {
         const { data, error } = await supabaseClient.from('patients').select('*').eq('hn', hn).single();
-        if (data) {
-            document.getElementById('hn').value = data.hn; 
-            document.getElementById('hn').readOnly = true; 
-            document.getElementById('hn').classList.add('bg-light');
-            document.getElementById('prefix').value = data.prefix || 'นาย'; 
-            document.getElementById('firstName').value = data.firstname || ''; 
-            document.getElementById('lastName').value = data.lastname || '';
-            document.getElementById('age').value = data.age || ''; 
+        if (error || !data) {
+            alert('ไม่พบข้อมูลผู้ป่วย HN: ' + hn);
+            return;
+        }
 
-            // ดึงข้อมูลวันเข้า การวินิจฉัย และข้อมูลการรักษาทั้งหมดขึ้นมาก่อน
-            document.getElementById('icuInDate').value = data.icu_in_date || '';
-            document.getElementById('admType').value = data.adm_type || ''; 
-            document.getElementById('admFrom').value = data.adm_from || ''; 
-            document.getElementById('diseaseGroup').value = data.disease_group || '';
-            document.getElementById('primaryDiagnosis').value = data.primary_diagnosis || '';
-            
-            document.getElementById('hasSepsis').checked = data.has_sepsis; 
-            toggleSepsisDetail();
-            if (data.has_sepsis) { 
-                document.getElementById('sepsisType').value = data.sepsis_type || ''; 
-                document.getElementById('sepsisSourceDetail').value = data.sepsis_source || ''; 
-            }
+        // 1. ข้อมูลพื้นฐานและการรับเข้า (ดึงขึ้นมาก่อนทันที)
+        document.getElementById('hn').value = data.hn || ''; 
+        document.getElementById('hn').readOnly = true; 
+        document.getElementById('hn').classList.add('bg-light');
+        document.getElementById('prefix').value = data.prefix || 'นาย'; 
+        document.getElementById('firstName').value = data.firstname || ''; 
+        document.getElementById('lastName').value = data.lastname || '';
+        document.getElementById('age').value = data.age || ''; 
 
-            document.getElementById('icuReason').value = data.icu_reason || ''; 
-            document.getElementById('docOwner').value = data.doctor_owner || ''; 
-            document.getElementById('docSupport').value = data.doctor_support || '';
-            document.getElementById('icuOutDate').value = data.discharge_date || ''; 
-            document.getElementById('dischargeStatus').value = (data.status === 'กำลังรักษา (In ICU)') ? '' : (data.status || '');
-            document.getElementById('destinationDetail').value = data.destination || '';
-            
-            if (data.triss_score) document.getElementById('outTRISS').innerText = data.triss_score; 
-            if (data.apache_score) document.getElementById('outAPACHE').innerText = data.apache_score;
+        document.getElementById('icuInDate').value = data.icu_in_date ? data.icu_in_date.split('T')[0] : '';
+        document.getElementById('admType').value = data.adm_type || ''; 
+        document.getElementById('admFrom').value = data.adm_from || ''; 
+        document.getElementById('diseaseGroup').value = data.disease_group || '';
+        document.getElementById('primaryDiagnosis').value = data.primary_diagnosis || '';
+        document.getElementById('icuReason').value = data.icu_reason || '';
 
-            if (data.complication) {
-                const compStr = data.complication;
-                document.querySelectorAll('.comp-check').forEach(cb => {
-                    if (compStr.includes(cb.value)) cb.checked = true;
-                });
-                const otherMatch = compStr.match(/Other: (.*)/);
-                if (otherMatch) document.getElementById('comp_other').value = otherMatch[1];
-            }
+        // 2. Sepsis
+        document.getElementById('hasSepsis').checked = Boolean(data.has_sepsis); 
+        toggleSepsisDetail();
+        if (data.has_sepsis) { 
+            document.getElementById('sepsisType').value = data.sepsis_type || ''; 
+            document.getElementById('sepsisSourceDetail').value = data.sepsis_source || ''; 
+        }
 
-            if (data.surgery) {
-                document.getElementById('surgery-container').innerHTML = ''; 
-                data.surgery.split('\n').forEach(s => { 
-                    const parts = s.split(' : '); 
-                    addSurgeryRow(parts[0] || '', parts[1] || ''); 
-                });
-            } else { 
-                addSurgeryRow(); 
-            }
-            
-            if (data.device_records) {
-                document.getElementById('ett-container').innerHTML = ''; 
-                document.getElementById('vent-container').innerHTML = ''; 
-                document.getElementById('foley-container').innerHTML = ''; 
-                document.getElementById('cline-container').innerHTML = ''; 
-                document.getElementById('piv-container').innerHTML = '';
-                try {
-                    let devs = JSON.parse(data.device_records);
-                    if (devs.ett && devs.ett.length > 0) devs.ett.forEach(d => addDeviceRow('ett-container', d.on, d.off)); else addDeviceRow('ett-container');
-                    if (devs.vent && devs.vent.length > 0) devs.vent.forEach(d => addDeviceRow('vent-container', d.on, d.off)); else addDeviceRow('vent-container');
-                    if (devs.foley && devs.foley.length > 0) devs.foley.forEach(d => addDeviceRow('foley-container', d.on, d.off)); else addDeviceRow('foley-container');
-                    if (devs.cline && devs.cline.length > 0) devs.cline.forEach(d => addDeviceRow('cline-container', d.on, d.off)); else addDeviceRow('cline-container');
-                    if (devs.piv && devs.piv.length > 0) devs.piv.forEach(d => addDeviceRow('piv-container', d.on, d.off)); else addDeviceRow('piv-container');
-                } catch(e) {}
-            } else { 
-                addDeviceRow('ett-container'); 
-                addDeviceRow('vent-container'); 
-                addDeviceRow('foley-container'); 
-                addDeviceRow('cline-container'); 
-                addDeviceRow('piv-container');
-            }
+        // 3. แพทย์ และสถานะจำหน่าย
+        document.getElementById('docOwner').value = data.doctor_owner || ''; 
+        document.getElementById('docSupport').value = data.doctor_support || '';
+        document.getElementById('icuOutDate').value = data.discharge_date ? data.discharge_date.split('T')[0] : ''; 
+        document.getElementById('dischargeStatus').value = (data.status === 'กำลังรักษา (In ICU)') ? '' : (data.status || '');
+        document.getElementById('destinationDetail').value = data.destination || '';
+        
+        // 4. คะแนน TRISS และ APACHE
+        if (data.triss_score) document.getElementById('outTRISS').innerText = data.triss_score; 
+        if (data.apache_score) document.getElementById('outAPACHE').innerText = data.apache_score;
 
-            // แยกข้อมูลที่อยู่กลับลง 4 ช่อง (บ้านเลขที่, จังหวัด, อำเภอ, ตำบล)
+        // 5. ภาวะแทรกซ้อน
+        if (data.complication) {
+            const compStr = data.complication;
+            document.querySelectorAll('.comp-check').forEach(cb => {
+                cb.checked = compStr.includes(cb.value);
+            });
+            const otherMatch = compStr.match(/Other: (.*)/);
+            if (otherMatch) document.getElementById('comp_other').value = otherMatch[1];
+        }
+
+        // 6. ประวัติการผ่าตัด
+        document.getElementById('surgery-container').innerHTML = ''; 
+        if (data.surgery) {
+            data.surgery.split('\n').forEach(s => { 
+                const parts = s.split(' : '); 
+                addSurgeryRow(parts[0] || '', parts[1] || ''); 
+            });
+        } else { 
+            addSurgeryRow(); 
+        }
+        
+        // 7. อุปกรณ์สายสวน
+        ['ett-container', 'vent-container', 'foley-container', 'cline-container', 'piv-container'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '';
+        });
+        if (data.device_records) {
+            try {
+                let devs = JSON.parse(data.device_records);
+                if (devs.ett && devs.ett.length > 0) devs.ett.forEach(d => addDeviceRow('ett-container', d.on, d.off)); else addDeviceRow('ett-container');
+                if (devs.vent && devs.vent.length > 0) devs.vent.forEach(d => addDeviceRow('vent-container', d.on, d.off)); else addDeviceRow('vent-container');
+                if (devs.foley && devs.foley.length > 0) devs.foley.forEach(d => addDeviceRow('foley-container', d.on, d.off)); else addDeviceRow('foley-container');
+                if (devs.cline && devs.cline.length > 0) devs.cline.forEach(d => addDeviceRow('cline-container', d.on, d.off)); else addDeviceRow('cline-container');
+                if (devs.piv && devs.piv.length > 0) devs.piv.forEach(d => addDeviceRow('piv-container', d.on, d.off)); else addDeviceRow('piv-container');
+            } catch(e) {}
+        } else { 
+            addDeviceRow('ett-container'); addDeviceRow('vent-container'); addDeviceRow('foley-container'); addDeviceRow('cline-container'); addDeviceRow('piv-container');
+        }
+
+        // 8. แยกข้อมูลที่อยู่ลง 4 ช่องอย่างปลอดภัย (ครอบ try-catch กันค้าง)
+        try {
             const addr = data.address || '';
             const match = addr.match(/^(.*?)(?:\s+ต\.([^\s]+))?(?:\s+อ\.([^\s]+))?(?:\s+จ\.([^\s]+))?$/);
             if (match && match[4]) {
@@ -697,7 +703,6 @@
                 if (match[2]) {
                     document.getElementById('addr_tambon').value = match[2];
                 }
-                // กรณีชื่ออำเภอ/ตำบลในข้อมูลเก่าไม่ตรงกับตัวเลือก ให้เก็บข้อความเต็มไว้ในช่องแรกเพื่อกันข้อมูลแหว่ง
                 if ((match[3] && document.getElementById('addr_amphoe').value !== match[3]) ||
                     (match[2] && document.getElementById('addr_tambon').value !== match[2])) {
                     document.getElementById('addr_detail').value = addr;
@@ -709,6 +714,8 @@
                 document.getElementById('addr_province').value = '';
                 await updateAmphoe();
             }
+        } catch (err) {
+            console.error(err);
         }
     }
 
@@ -836,7 +843,12 @@
     async function savePatientData() {
         const hn = document.getElementById('hn').value;
         if (!hn) { alert('กรุณากรอก HN ผู้ป่วยก่อนบันทึก!'); return; }
-
+        // เพิ่มบรรทัดนี้: ป้องกันการเผลอเซฟโดยไม่มีวันที่เข้า ICU ซึ่งจะทำให้รายชื่อหายจากตาราง
+        if (!document.getElementById('icuInDate').value) { 
+            alert('⚠️ กรุณาระบุ "วันที่เข้า ICU" ก่อนบันทึก มิฉะนั้นรายชื่อจะไม่แสดงในสมุดทะเบียนรายเดือนครับ'); 
+            return; 
+        }
+        
         let surgeries = [];
         document.querySelectorAll('#surgery-container .surg-entry').forEach(row => {
             let date = row.querySelector('.surg-date').value, detail = row.querySelector('.surg-detail').value;
