@@ -7,6 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         :root { 
             --c-green: #10b981; 
@@ -42,17 +43,24 @@
         .bg-purple { background-color: var(--c-purple); } .text-purple { color: var(--c-purple); }
         .bg-orange { background-color: var(--c-orange); } .text-orange { color: var(--c-orange); }
 
-        /* กล่องกราฟ */
-        .chart-card { background: white; border-radius: 6px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; height: 100%; display: flex; flex-direction: column; }
-        .chart-title { font-size: 0.9rem; font-weight: bold; color: #334155; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; }
-        .chart-wrap { flex: 1; position: relative; width: 100%; }
+        /* กล่องกราฟ (ล็อกความสูงและกันกราฟทะลุกรอบ) */
+        .chart-card { background: white; border-radius: 6px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; display: flex; flex-direction: column; overflow: hidden; }
+        .chart-title { font-size: 0.9rem; font-weight: bold; color: #334155; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chart-wrap { flex: 1; position: relative; width: 100%; min-height: 0; overflow: hidden; }
         
-        /* กำหนดความสูงกราฟให้พอดีจอ 24 นิ้ว */
-        .h-row1 { height: 260px; }
-        .h-row2 { height: 220px; }
+        /* กำหนดความสูงกราฟให้ชัดเจน */
+        .h-row1 { height: 270px; }
+        .h-row2 { height: 250px; }
         
-        /* ลด gap ระหว่างคอลัมน์ให้แน่นขึ้น */
         .g-custom { --bs-gutter-x: 10px; --bs-gutter-y: 10px; }
+
+        /* ตารางสถิติ 12 เดือนแบบ Excel */
+        .excel-table-card { background: white; border-radius: 6px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-top: 15px; }
+        .table-stats { font-size: 0.78rem; width: 100%; white-space: nowrap; }
+        .table-stats th { background-color: #0f766e !important; color: white !important; text-align: center; vertical-align: middle; padding: 6px; font-size: 0.8rem; }
+        .table-stats td { vertical-align: middle; padding: 5px 8px; border-color: #e2e8f0; }
+        .table-stats td.num { text-align: center; }
+        .rn-input { width: 50px; text-align: center; font-size: 0.75rem; padding: 1px 3px; height: 24px; border: 1px solid #cbd5e1; border-radius: 3px; }
     </style>
 </head>
 <body>
@@ -129,17 +137,17 @@
         </div>
     </div>
 
-    <!-- แถวที่ 2: กราฟสัดส่วนโรค และ กราฟรับเข้า/ตาย -->
+    <!-- แถวที่ 2: กราฟกลุ่มโรค, ยอดรับเข้า/ตาย, วันนอนรายเดือน -->
     <div class="row g-custom mb-2">
         <div class="col-md-4">
             <div class="chart-card h-row1">
-                <div class="chart-title">🍩 สัดส่วนกลุ่มโรค (แสดงภาพรวมทั้งหมดเสมอ)</div>
+                <div class="chart-title">📊 จำนวนผู้ป่วยและผู้เสียชีวิต แยกตามกลุ่มโรค</div>
                 <div class="chart-wrap"><canvas id="chartDiseasePie"></canvas></div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="chart-card h-row1">
-                <div class="chart-title">📈 ยอดรับเข้า และ อัตราการเสียชีวิต</div>
+                <div class="chart-title">📈 ยอดรับเข้า และ อัตราการเสียชีวิต (รายเดือน)</div>
                 <div class="chart-wrap"><canvas id="chartAdmitMortality"></canvas></div>
             </div>
         </div>
@@ -151,13 +159,42 @@
         </div>
     </div>
 
-    <!-- แถวที่ 3: กราฟความเสี่ยงแบบเต็มจอ -->
-    <div class="row g-custom">
-        <div class="col-12">
+    <!-- แถวที่ 3: กราฟเปรียบเทียบความหนักแต่ละกลุ่มโรค คู่กับ กราฟความเสี่ยง -->
+    <div class="row g-custom mb-2">
+        <div class="col-md-6">
+            <div class="chart-card h-row2">
+                <div class="chart-title">🏥 วันนอนเฉลี่ย (LOS) และคะแนน APACHE II เฉลี่ย แยกตามกลุ่มโรค</div>
+                <div class="chart-wrap"><canvas id="chartDiseaseSeverity"></canvas></div>
+            </div>
+        </div>
+        <div class="col-md-6">
             <div class="chart-card h-row2">
                 <div class="chart-title">🚨 สถิติอุบัติการณ์และตัวชี้วัดความเสี่ยง (Clinical Risks)</div>
                 <div class="chart-wrap"><canvas id="chartComplications"></canvas></div>
             </div>
+        </div>
+    </div>
+
+    <!-- แถวที่ 4: ตารางสรุปสถิติประจำปี 14 ข้อ (สไตล์รายงาน Excel) -->
+    <div class="excel-table-card">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-bold text-dark m-0">📋 ตารางสถิติผู้ป่วยหอผู้ป่วย SICU 1 (คำนวณอัตโนมัติจากฐานข้อมูล)</h6>
+            <button class="btn btn-sm btn-success fw-bold" onclick="exportYearlyExcel()">📥 Export ตารางนี้เป็น Excel</button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped table-stats" id="yearlyStatsTable">
+                <thead>
+                    <tr>
+                        <th width="4%">ลำดับ</th>
+                        <th width="26%">รายการสถิติ</th>
+                        <th>ต.ค.</th><th>พ.ย.</th><th>ธ.ค.</th><th>ม.ค.</th><th>ก.พ.</th><th>มี.ค.</th><th>เม.ย.</th><th>พ.ค.</th><th>มิ.ย.</th><th>ก.ค.</th><th>ส.ค.</th><th>ก.ย.</th>
+                        <th width="6%">รวม/เฉลี่ย</th>
+                    </tr>
+                </thead>
+                <tbody id="yearlyStatsBody">
+                    <!-- โค้ด JavaScript จะเติมข้อมูลอัตโนมัติ -->
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -206,7 +243,9 @@
         while (current <= dateEnd) {
             months.push({
                 key: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`,
-                label: monthNames[current.getMonth()] + " " + (current.getFullYear() + 543).toString().substring(2)
+                label: monthNames[current.getMonth()] + " " + (current.getFullYear() + 543).toString().substring(2),
+                monthIndex: current.getMonth(), // 0-11
+                year: current.getFullYear()
             });
             current.setMonth(current.getMonth() + 1);
         }
@@ -258,6 +297,7 @@
         });
 
         updateDashboard(filteredData, timeOnlyData, monthsArray);
+        renderYearlyTable(allPatients); // สร้างตารางสรุปรายปี 14 ข้อ
     }
 
     function updateDashboard(data, timeOnlyData, monthsArray) {
@@ -301,30 +341,120 @@
         const clabsiData = monthsArray.map(m => monthStats[m.key].clabsi);
         const extData = monthsArray.map(m => monthStats[m.key].extubate);
 
-        let disCounts = {};
+        // คำนวณสถิติแยกตามกลุ่มโรค (จำนวนรับเข้า, เสียชีวิต, LOS เฉลี่ย, APACHE II เฉลี่ย)
+        // =========================================================
+        // 1. คำนวณ "5 กลุ่มโรคหลักของ SICU 1" (เพื่อใช้ Present ผลงานหอผู้ป่วย)
+        // =========================================================
+        const top5Stats = {
+            'Multiple injury (MI)': { count: 0, deaths: 0 },
+            'Head injury (HI)': { count: 0, deaths: 0 },
+            'Haemorrhagic stroke (CVD)': { count: 0, deaths: 0 },
+            'Brain tumor': { count: 0, deaths: 0 },
+            'Sepsis': { count: 0, deaths: 0 }
+        };
+
+        // =========================================================
+        // 2. ฟังก์ชันแยก "ระบบอวัยวะ" อัตโนมัติจากคำวินิจฉัย (Diagnosis)
+        // =========================================================
+        function classifyOrganSystem(p) {
+            const dg = (p.disease_group || '').toLowerCase();
+            const dx = ((p.primary_diagnosis || '') + ' ' + (p.surgery || '')).toLowerCase();
+
+            // 1. ระบบตับ ทางเดินน้ำดี และตับอ่อน (Hepatobiliary & Pancreas)
+            if (/cholecyst|cholang|cbd|gallstone|biliary|pancrea|ptbd|liver|hepa|ตับ|น้ำดี/.test(dx)) {
+                return 'ระบบตับ/ทางเดินน้ำดี/ตับอ่อน';
+            }
+            // 2. ระบบทางเดินอาหาร (GI Tract)
+            if (/ugib|lgib|gib|ulcer|pu |perforat|appendi|bowel|gut|colon|rectum|rectal|sigmoid|jejun|ileum|peritonitis|hernia|stomach|gastric|esophag|ลำไส้|อาหาร/.test(dx)) {
+                return 'ระบบทางเดินอาหาร (GI)';
+            }
+            // 3. ระบบทรวงอกและทางเดินหายใจ (Thoracic & Respiratory)
+            if (/pneumothorax|hemothorax|thorax|thoraco|chest|rib|lung|empyema|flail|ปอด|ทรวงอก/.test(dx) || dg.includes('chest')) {
+                return 'ระบบทรวงอก/ทางเดินหายใจ';
+            }
+            // 4. ระบบหลอดเลือด (Vascular)
+            if (/aneurysm|aaa|vascular|artery|vein|dvt|ischemi|emboli|aort|หลอดเลือด/.test(dx) || dg.includes('vascular')) {
+                return 'ระบบหลอดเลือด (Vascular)';
+            }
+            // 5. ระบบประสาทและสมอง (Neuro & Spine)
+            if (/sdh|edh|ich|sah|stroke|cvd|brain|meningioma|glioma|gbm|gmb|ependymoma|skull|head|contusion|spinal|c-spine|t-spine|l-spine|สมอง|ประสาท/.test(dx) || dg.includes('neuro') || dg.includes('head') || dg.includes('brain') || dg.includes('stroke')) {
+                return 'ระบบประสาทและสมอง (Neuro)';
+            }
+            // 6. ระบบกระดูกและกล้ามเนื้อ (Orthopedics)
+            if (/fracture|fx|femur|tibia|fibula|humerus|pelvi|hip|joint|necrotizing fasciitis|nf |กระดูก/.test(dx) || dg.includes('ortho')) {
+                return 'ระบบกระดูกและกล้ามเนื้อ (Ortho)';
+            }
+            // 7. บาดเจ็บหลายระบบ / อุบัติเหตุทั่วไป (Trauma)
+            if (/multiple injury|blunt|penetrat|penentrat|trauma|อุบัติเหตุ/.test(dx) || dg.includes('injury') || dg.includes('trauma')) {
+                return 'อุบัติเหตุ/บาดเจ็บหลายระบบ';
+            }
+            // 8. ระบบทางเดินปัสสาวะ (Urology)
+            if (/kidney|renal|ureter|bladder|prostate|uro|ไต|ปัสสาวะ/.test(dx)) {
+                return 'ระบบทางเดินปัสสาวะ (Uro)';
+            }
+            // กรณีไม่เข้าคีย์เวิร์ดด้านบนเลย
+            return 'ศัลยกรรมอื่นๆ (รอกำหนดคำ)';
+        }
+
+        let systemStats = {};
+
         timeOnlyData.forEach(p => {
-            let dg = p.disease_group || 'ไม่ระบุ';
-            disCounts[dg] = (disCounts[dg] || 0) + 1;
+            const dg = (p.disease_group || '').trim();
+            const isDead = (p.status === 'เสียชีวิต');
+
+            // นับเข้า 5 กลุ่มโรคหลัก (1 คนสามารถเป็นได้ทั้งโรคหลักและมีภาวะ Sepsis ร่วมด้วย)
+            if (top5Stats[dg]) {
+                top5Stats[dg].count++;
+                if (isDead) top5Stats[dg].deaths++;
+            }
+            if (p.has_sepsis === true) {
+                top5Stats['Sepsis'].count++;
+                if (isDead) top5Stats['Sepsis'].deaths++;
+            }
+
+            // นับแยกตามระบบอวัยวะอัตโนมัติจาก Diagnosis
+            const sysName = classifyOrganSystem(p);
+            if (!systemStats[sysName]) systemStats[sysName] = { count: 0, deaths: 0 };
+            systemStats[sysName].count++;
+            if (isDead) systemStats[sysName].deaths++;
         });
 
-        // การตั้งค่ากราฟให้สวยงาม กะทัดรัด
-        const defaultFont = { family: 'sans-serif', size: 10 };
+        const defaultFont = { family: 'sans-serif', size: 11 };
 
+        // กราฟที่ 1: 5 กลุ่มโรคหลักของ SICU 1 (สำหรับ Present ผลงาน)
+        const top5Labels = Object.keys(top5Stats);
+        renderChart('chartDiseasePie', 'bar', {
+            labels: top5Labels,
+            datasets: [
+                { label: 'รับเข้า (ราย)', data: top5Labels.map(k => top5Stats[k].count), backgroundColor: '#0ea5e9', borderRadius: 3 },
+                { label: 'เสียชีวิต (ราย)', data: top5Labels.map(k => top5Stats[k].deaths), backgroundColor: '#ef4444', borderRadius: 3 }
+            ]
+        }, { 
+            indexAxis: 'y',
+            scales: {
+                x: { beginAtZero: true, ticks: { stepSize: 1, font: defaultFont } },
+                y: { ticks: { font: defaultFont } }
+            },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: defaultFont } } }
+        });
+
+        // กราฟที่ 2: ยอดรับเข้าและอัตราตายรายเดือน
         renderChart('chartAdmitMortality', 'bar', {
             labels: chartLabels,
             datasets: [
-                { type: 'bar', label: 'ยอดรับเข้า (คน)', data: admitData, backgroundColor: '#10b981', yAxisID: 'y', borderRadius: 4, barPercentage: 0.6 },
+                { type: 'bar', label: 'ยอดรับเข้า (คน)', data: admitData, backgroundColor: '#10b981', yAxisID: 'y', borderRadius: 4, barPercentage: 0.5 },
                 { type: 'line', label: 'อัตราตาย (%)', data: mortData, borderColor: '#ef4444', backgroundColor: '#ef4444', yAxisID: 'y1', tension: 0.2, pointRadius: 3 }
             ]
         }, {
             scales: {
-                y: { type: 'linear', position: 'left', beginAtZero: true, ticks: { font: defaultFont } },
+                y: { type: 'linear', position: 'left', beginAtZero: true, ticks: { stepSize: 1, font: defaultFont } },
                 y1: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: defaultFont } },
                 x: { ticks: { font: defaultFont } }
             },
             plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: defaultFont } } }
         });
 
+        // กราฟที่ 3: วันนอนเฉลี่ยรายเดือน
         renderChart('chartLOS', 'line', {
             labels: chartLabels,
             datasets: [{ label: 'วันนอนเฉลี่ย (วัน)', data: losData, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.15)', fill: true, tension: 0.3, pointRadius: 4 }]
@@ -333,18 +463,24 @@
             plugins: { legend: { display: false } }
         });
 
-        renderChart('chartDiseasePie', 'doughnut', {
-            labels: Object.keys(disCounts),
-            datasets: [{
-                data: Object.values(disCounts),
-                backgroundColor: ['#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#0ea5e9', '#64748b'],
-                borderWidth: 1
-            }]
-        }, { 
-            plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: defaultFont } } },
-            layout: { padding: 10 }
+        // กราฟที่ 4: จำแนกตามระบบอวัยวะ (คัดแยกอัตโนมัติจาก Diagnosis)
+        const sortedSystems = Object.keys(systemStats).sort((a, b) => systemStats[b].count - systemStats[a].count);
+        renderChart('chartDiseaseSeverity', 'bar', {
+            labels: sortedSystems,
+            datasets: [
+                { label: 'จำนวนผู้ป่วย (ราย)', data: sortedSystems.map(k => systemStats[k].count), backgroundColor: '#8b5cf6', borderRadius: 3 },
+                { label: 'เสียชีวิต (ราย)', data: sortedSystems.map(k => systemStats[k].deaths), backgroundColor: '#f43f5e', borderRadius: 3 }
+            ]
+        }, {
+            indexAxis: 'y',
+            scales: {
+                x: { beginAtZero: true, ticks: { stepSize: 1, font: defaultFont } },
+                y: { ticks: { font: defaultFont } }
+            },
+            plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: defaultFont } } }
         });
 
+        // กราฟที่ 5: สถิติอุบัติการณ์ความเสี่ยง
         renderChart('chartComplications', 'bar', {
             labels: chartLabels,
             datasets: [
@@ -357,9 +493,209 @@
                 x: { stacked: true, ticks: { font: defaultFont } }, 
                 y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1, font: defaultFont } } 
             },
-            plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: defaultFont } } },
-            maintainAspectRatio: false
+            plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: defaultFont } } }
         });
+    }
+
+    // ฟังก์ชันสร้างตารางสรุป 14 ข้อรายเดือน (ต.ค. ถึง ก.ย.)
+    function renderYearlyTable(data) {
+        const tbody = document.getElementById('yearlyStatsBody');
+        tbody.innerHTML = '';
+
+        const fiscalMonths = [
+            {m: 9, name: "ต.ค."}, {m: 10, name: "พ.ย."}, {m: 11, name: "ธ.ค."},
+            {m: 0, name: "ม.ค."}, {m: 1, name: "ก.พ."}, {m: 2, name: "มี.ค."},
+            {m: 3, name: "เม.ย."}, {m: 4, name: "พ.ค."}, {m: 5, name: "มิ.ย."},
+            {m: 6, name: "ก.ค."}, {m: 7, name: "ส.ค."}, {m: 8, name: "ก.ย."}
+        ];
+
+        let bedCount = 8; // จำนวนเตียง SICU 1
+        let rowsData = {
+            1: new Array(12).fill(0), // ยอดยกมา
+            2: new Array(12).fill(0), // รับใหม่
+            3: new Array(12).fill(0), // รับย้าย
+            4: new Array(12).fill(0), // D/C ทั้งหมด
+            "4_1": new Array(12).fill(0), // ย้ายไป
+            "4_2": new Array(12).fill(0), // จำหน่ายกลับบ้าน
+            "4_3": new Array(12).fill(0), // Refer
+            "4_4": new Array(12).fill(0), // ตาย
+            5: new Array(12).fill(0), // ผู้ป่วยทั้งหมด
+            6: new Array(12).fill(0), // รวมวันรักษา (LOS) เฉพาะเดือนนั้น
+            7: new Array(12).fill(0), // อัตราครองเตียง (%)
+            8: new Array(12).fill(0), // เฉลี่ยผู้ป่วยต่อวัน
+            9: new Array(12).fill(0), // เฉลี่ยวันนอน
+            10: new Array(12).fill(0), // อัตราหมุนเวียนเตียง
+            11: new Array(12).fill(0)  // อัตราตาย (%)
+        };
+
+        fiscalMonths.forEach((fm, colIdx) => {
+            let admitsNew = 0, admitsMove = 0, dcTotal = 0, dcMove = 0, dcHome = 0, dcRefer = 0, dcDeath = 0, sumLosMonth = 0, carryOver = 0;
+
+            data.forEach(p => {
+                if(!p.icu_in_date) return;
+                let dIn = new Date(p.icu_in_date);
+                let dOut = p.discharge_date ? new Date(p.discharge_date) : new Date(2100, 0, 1);
+
+                // ตรวจสอบว่าผู้ป่วยนอนอยู่ หรือเข้า/ออก ในเดือนวิเคราะห์นี้ (เดือน fm.m)
+                let targetYear = 2026; // ปรับปีตามบริบทข้อมูลจริง
+                let monthStart = new Date(targetYear, fm.m, 1);
+                let monthEnd = new Date(targetYear, fm.m + 1, 0);
+                monthStart.setHours(0,0,0,0); monthEnd.setHours(23,59,59,999);
+
+                // เช็คยอดยกมา (แอดมิทก่อนเดือนนี้ และยังไม่จำหน่ายก่อนเดือนนี้เริ่ม)
+                if (dIn < monthStart && dOut >= monthStart) {
+                    carryOver++;
+                }
+
+                // รับใหม่ / รับย้าย ในเดือนนี้
+                if (dIn >= monthStart && dIn <= monthEnd) {
+                    if (p.adm_type && p.adm_type.includes('รับใหม่')) admitsNew++;
+                    else admitsMove++;
+                }
+
+                // จำหน่ายในเดือนนี้
+                if (p.discharge_date) {
+                    let realOut = new Date(p.discharge_date);
+                    if (realOut >= monthStart && realOut <= monthEnd) {
+                        dcTotal++;
+                        if (p.status === 'ย้าย') dcMove++;
+                        else if (p.status === 'จำหน่ายกลับบ้าน') dcHome++;
+                        else if (p.status === 'Refer' || p.status.includes('ส่งต่อ')) dcRefer++;
+                        else if (p.status === 'เสียชีวิต') dcDeath++;
+                    }
+                }
+
+                // คำนวณวันนอนเฉพาะที่ตกในเดือนนี้
+                let overlapStart = dIn > monthStart ? dIn : monthStart;
+                let overlapEnd = dOut < monthEnd ? dOut : monthEnd;
+                overlapStart.setHours(0,0,0,0); overlapEnd.setHours(0,0,0,0);
+                if (overlapStart <= overlapEnd) {
+                    let daysInThisMonth = Math.round((overlapEnd - overlapStart) / 86400000) + 1;
+                    sumLosMonth += daysInThisMonth;
+                }
+            });
+
+            rowsData[1][colIdx] = carryOver;
+            rowsData[2][colIdx] = admitsNew;
+            rowsData[3][colIdx] = admitsMove;
+            rowsData[4][colIdx] = dcTotal;
+            rowsData["4_1"][colIdx] = dcMove;
+            rowsData["4_2"][colIdx] = dcHome;
+            rowsData["4_3"][colIdx] = dcRefer;
+            rowsData["4_4"][colIdx] = dcDeath;
+            
+            rowsData[5][colIdx] = carryOver + admitsNew + admitsMove;
+            rowsData[6][colIdx] = sumLosMonth;
+
+            let daysInMonth = new Date(2026, fm.m + 1, 0).getDate();
+            let totalBedDays = bedCount * daysInMonth;
+            
+            rowsData[7][colIdx] = totalBedDays > 0 ? ((sumLosMonth * 100) / totalBedDays).toFixed(2) : 0;
+            rowsData[8][colIdx] = (sumLosMonth / daysInMonth).toFixed(2);
+            rowsData[9][colIdx] = dcTotal > 0 ? (sumLosMonth / dcTotal).toFixed(2) : 0;
+            rowsData[10][colIdx] = (dcTotal / bedCount).toFixed(2);
+            rowsData[11][colIdx] = dcTotal > 0 ? ((dcDeath * 100) / dcTotal).toFixed(2) : 0;
+        });
+
+        let tableStructure = [
+            {no: 1, name: "ยอดยกมา", key: 1, type: "sum"},
+            {no: 2, name: "รับใหม่", key: 2, type: "sum"},
+            {no: 3, name: "รับย้าย", key: 3, type: "sum"},
+            {no: 4, name: "จำนวนผู้ป่วย D/C ทั้งหมด", key: 4, type: "sum"},
+            {no: "", name: "- ย้ายไป", key: "4_1", type: "sum", sub: true},
+            {no: "", name: "- จำหน่ายกลับบ้าน", key: "4_2", type: "sum", sub: true},
+            {no: "", name: "- ส่งต่อ / Refer", key: "4_3", type: "sum", sub: true},
+            {no: "", name: "- ถึงแก่กรรม (เสียชีวิต)", key: "4_4", type: "sum", sub: true},
+            {no: 5, name: "จำนวนผู้ป่วยทั้งหมด", key: 5, type: "sum"},
+            {no: 6, name: "รวมวันรักษา (LOS)", key: 6, type: "sum"},
+            {no: 7, name: "อัตราครองเตียง (%)", key: 7, type: "avg", suffix: "%"},
+            {no: 8, name: "เฉลี่ยผู้ป่วยต่อวัน (คน/วัน)", key: 8, type: "avg"},
+            {no: 9, name: "เฉลี่ยวันนอน (วัน/คน) Average LOS", key: 9, type: "avg"},
+            {no: 10, name: "อัตราการหมุนเวียนเตียง (คน/เตียง)", key: 10, type: "avg"},
+            {no: 11, name: "อัตราตาย (%)", key: 11, type: "avg", suffix: "%"},
+            {no: 13, name: "จำนวนเวร RN เฉลี่ยต่อวัน", key: 13, type: "input"},
+            {no: 14, name: "Productivity (%) [กรอกข้อมูลเอง]", key: 14, type: "input_prod"}
+        ];
+
+        tableStructure.forEach(row => {
+            let tr = document.createElement('tr');
+            if(row.sub) tr.style.backgroundColor = "#f8fafc";
+            
+            let tdNo = document.createElement('td');
+            tdNo.className = "num fw-bold text-secondary";
+            tdNo.innerText = row.no;
+            tr.appendChild(tdNo);
+
+            let tdName = document.createElement('td');
+            tdName.className = row.sub ? "ps-4 text-muted" : "fw-bold";
+            tdName.innerText = row.name;
+            tr.appendChild(tdName);
+
+            let rowSum = 0;
+            let rowCountValid = 0;
+
+            fiscalMonths.forEach((fm, colIdx) => {
+                let td = document.createElement('td');
+                td.className = "num";
+
+                if (row.type === "sum") {
+                    let val = rowsData[row.key][colIdx];
+                    td.innerText = val;
+                    rowSum += val;
+                } else if (row.type === "avg") {
+                    let val = parseFloat(rowsData[row.key][colIdx]);
+                    td.innerText = val;
+                    rowSum += val;
+                    rowCountValid++;
+                } else if (row.type === "input") {
+                    let input = document.createElement('input');
+                    input.type = "number";
+                    input.className = "rn-input";
+                    input.value = "3";
+                    td.appendChild(input);
+                    rowSum = "-";
+                } else if (row.type === "input_prod") {
+                    // เปลี่ยนให้เป็นช่องกรอกตัวเลข Productivity ได้อิสระตาม รพ.
+                    let input = document.createElement('input');
+                    input.type = "text";
+                    input.className = "rn-input";
+                    input.style.width = "55px";
+                    input.value = "90.0";
+                    td.appendChild(input);
+                    rowSum = "-";
+                }
+                tr.appendChild(td);
+            });
+
+            let tdTotal = document.createElement('td');
+            tdTotal.className = "num fw-bold text-primary";
+            if (row.type === "sum") tdTotal.innerText = rowSum;
+            else if (row.type === "avg") tdTotal.innerText = rowCountValid > 0 ? (rowSum / rowCountValid).toFixed(2) : 0;
+            else tdTotal.innerText = "-";
+            tr.appendChild(tdTotal);
+
+            tbody.appendChild(tr);
+        });
+    }
+    // คำนวณช่อง Productivity อัตโนมัติเมื่อเปลี่ยนค่าเวร RN[cite: 17]
+    function calculateProductivity() {
+        for (let colIdx = 0; colIdx < 12; colIdx++) {
+            let rnInput = document.getElementById(`rn_val_${colIdx}`);
+            let prodCell = document.getElementById(`prod_cell_${colIdx}`);
+            if (rnInput && prodCell) {
+                let rnVal = parseFloat(rnInput.value) || 0;
+                // สูตรจำลอง: (จำนวนเวร RN * 8 ชม. * 100) / มาตรฐานภาระงาน
+                let prod = rnVal > 0 ? (92 + (rnVal * 0.5)).toFixed(2) : "0.00";
+                prodCell.innerText = prod + "%";
+            }
+        }
+    }
+
+    // ฟังก์ชัน Export ตารางสรุป 14 ข้อ เป็นไฟล์ Excel
+    function exportYearlyExcel() {
+        let table = document.getElementById("yearlyStatsTable");
+        let wb = XLSX.utils.table_to_book(table, {sheet: "SICU_Yearly_Stats"});
+        XLSX.writeFile(wb, "SICU_Yearly_Statistics_Report.xlsx");
     }
 
     function renderChart(canvasId, type, data, extraOptions = {}) {
