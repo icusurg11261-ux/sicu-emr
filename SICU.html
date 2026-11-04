@@ -121,78 +121,163 @@
     </ul>
 
     <div class="tab-content">
-        <!-- ==========================================
-             TAB 1 : คะแนน TRISS (Trauma Score)
-        =========================================== -->
+        <!-- ==================== แท็บที่ 1: คำนวณคะแนน TRISS ==================== -->
         <div class="tab-pane fade show active" id="tab-triss">
-            <div class="card border-primary mb-4">
+            <div class="card border-primary mb-3">
                 <div class="card-header bg-primary text-white fw-bold">
                     คำนวณคะแนน TRISS (Trauma Score)
                 </div>
                 <div class="card-body bg-light">
-                    <!-- ข้อมูลพื้นฐานการบาดเจ็บ -->
-                    <div class="row mb-4">
+                    <!-- ประเภทการบาดเจ็บ -->
+                    <div class="row mb-3">
                         <div class="col-md-4">
                             <label class="form-label fw-bold">ประเภทการบาดเจ็บ</label>
-                            <select class="form-select" id="traumaType" onchange="calcTRISS()">
+                            <select class="form-select" id="triss_type" onchange="calcTRISS()">
                                 <option value="blunt">Blunt (กระแทก)</option>
-                                <option value="penetrating">Penetrating (ทะลุ)</option>
+                                <option value="penetrating">Penetrating (ทะลุทะลวง)</option>
                             </select>
                         </div>
                     </div>
 
-                    <!-- ข้อมูลสัญญาณชีพ (RTS) -->
+                    <!-- สัญญาณชีพเบื้องต้น (RTS) -->
                     <h6 class="text-primary fw-bold border-bottom pb-2">สัญญาณชีพเบื้องต้น (RTS)</h6>
-                    <div class="row mb-4 g-2">
-                        <div class="col-md-4">
-                            <label class="form-label small mb-1">GCS (3-15)</label>
-                            <input type="number" class="form-control" id="er_gcs" onchange="calcTRISS()">
+                    <div class="row mb-4 g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1 fw-bold">Eye (E : การลืมตา)</label>
+                            <select class="form-select form-select-sm" id="triss_e" onchange="calcTRISS()">
+                                <option value="">-- เลือกการลืมตา (E) --</option>
+                                <option value="4">4 = ลืมตาได้เองตามปกติ</option>
+                                <option value="3">3 = ลืมตาเมื่อเรียกชื่อ/พูดด้วย</option>
+                                <option value="2">2 = ลืมตาเมื่อกระตุ้นให้เจ็บ</option>
+                                <option value="1">1 = ไม่ลืมตาเลย</option>
+                            </select>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label small mb-1">SBP (mmHg)</label>
-                            <input type="number" class="form-control" id="er_sbp" onchange="calcTRISS()">
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1 fw-bold">Verbal (V : การพูดคุย)</label>
+                            <select class="form-select form-select-sm" id="triss_v" onchange="calcTRISS()">
+                                <option value="">-- เลือกการพูดคุย (V) --</option>
+                                <option value="5">5 = พูดคุยรู้เรื่อง บอกเวลา/สถานที่ถูก</option>
+                                <option value="4">4 = พูดคุยสับสน แต่ตอบเป็นประโยคได้</option>
+                                <option value="3">3 = พูดเป็นคำๆ ไม่เป็นประโยค</option>
+                                <option value="2">2 = ส่งเสียงคราง ไม่เป็นคำพูด</option>
+                                <option value="1">1 = ไม่ส่งเสียงเลย / ใส่ท่อช่วยหายใจ (ETT)</option>
+                            </select>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label small mb-1">RR (ครั้ง/นาที)</label>
-                            <input type="number" class="form-control" id="er_rr" onchange="calcTRISS()">
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1 fw-bold">Motor (M : การเคลื่อนไหว)</label>
+                            <select class="form-select form-select-sm" id="triss_m" onchange="calcTRISS()">
+                                <option value="">-- เลือกการเคลื่อนไหว (M) --</option>
+                                <option value="6">6 = ทำตามคำสั่งได้ถูกต้อง</option>
+                                <option value="5">5 = ทราบจุดที่เจ็บ ยกมือปัดป้องได้</option>
+                                <option value="4">4 = ชักแขนขาหนีเมื่อกระตุ้นให้เจ็บ</option>
+                                <option value="3">3 = แขนงอเกร็งผิดปกติ (Decorticate)</option>
+                                <option value="2">2 = แขนขาเหยียดเกร็ง (Decerebrate)</option>
+                                <option value="1">1 = ไม่เคลื่อนไหวเลย</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1 text-primary fw-bold">รวมคะแนน GCS (Code V)</label>
+                            <input type="text" class="form-control form-control-sm bg-white fw-bold text-primary text-center" id="triss_gcs_display" readonly value="-">
+                        </div>
+                        <div class="col-md-3 mt-2">
+                            <label class="form-label small mb-1">SBP (mmHg) <span id="triss_sbp_code" class="badge bg-secondary">Code: -</span></label>
+                            <input type="number" class="form-control form-control-sm" id="triss_sbp" oninput="calcTRISS()">
+                        </div>
+                        <div class="col-md-3 mt-2">
+                            <label class="form-label small mb-1">RR (ครั้ง/นาที) <span id="triss_rr_code" class="badge bg-secondary">Code: -</span></label>
+                            <input type="number" class="form-control form-control-sm" id="triss_rr" oninput="calcTRISS()">
                         </div>
                     </div>
 
-                    <!-- ข้อมูลความรุนแรง (AIS) -->
-                    <h6 class="text-primary fw-bold border-bottom pb-2">ระดับความรุนแรง AIS</h6>
-                    <div class="row mb-3 g-2">
+                    <!-- ระดับความรุนแรง AIS (6 Organs) -->
+                    <h6 class="text-primary fw-bold border-bottom pb-2">ระดับความรุนแรง AIS (เลือกคะแนนสูงสุด 3 อวัยวะ / หากมี 6 = Maximum คิด ISS เท่ากับ 75 ทันที)</h6>
+                    <div class="row mb-3 g-3">
                         <div class="col-md-4">
-                            <label class="form-label small mb-1">Head & Neck</label>
-                            <input type="number" class="form-control ais-input" id="ais_head" onchange="calcTRISS()">
+                            <label class="form-label small mb-1 fw-bold">1. Head & Neck (รวมหูชั้นกลางและชั้นใน)</label>
+                            <select class="form-select ais-select" id="ais_head" onchange="calcTRISS()">
+                                <option value="0">0 - ไม่มีการบาดเจ็บ</option>
+                                <option value="1">1 - Minor (เล็กน้อย)</option>
+                                <option value="2">2 - Moderate (ปานกลาง)</option>
+                                <option value="3">3 - Serious (มากแต่ไม่คุกคามชีวิต)</option>
+                                <option value="4">4 - Severe (มากและคุกคามต่อชีวิต)</option>
+                                <option value="5">5 - Critical (วิกฤต ไม่แน่ใจโอกาสรอด)</option>
+                                <option value="6">6 - Maximum (รุนแรงที่สุด -> ISS = 75)</option>
+                                <option value="9">9 - Unknown (ไม่ทราบว่าบาดเจ็บหรือไม่)</option>
+                            </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label small mb-1">Face</label>
-                            <input type="number" class="form-control ais-input" id="ais_face" onchange="calcTRISS()">
+                            <label class="form-label small mb-1 fw-bold">2. Face (รวมดวงตา)</label>
+                            <select class="form-select ais-select" id="ais_face" onchange="calcTRISS()">
+                                <option value="0">0 - ไม่มีการบาดเจ็บ</option>
+                                <option value="1">1 - Minor (เล็กน้อย)</option>
+                                <option value="2">2 - Moderate (ปานกลาง)</option>
+                                <option value="3">3 - Serious (มากแต่ไม่คุกคามชีวิต)</option>
+                                <option value="4">4 - Severe (มากและคุกคามต่อชีวิต)</option>
+                                <option value="5">5 - Critical (วิกฤต ไม่แน่ใจโอกาสรอด)</option>
+                                <option value="6">6 - Maximum (รุนแรงที่สุด -> ISS = 75)</option>
+                                <option value="9">9 - Unknown (ไม่ทราบว่าบาดเจ็บหรือไม่)</option>
+                            </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label small mb-1">Chest</label>
-                            <input type="number" class="form-control ais-input" id="ais_chest" onchange="calcTRISS()">
+                            <label class="form-label small mb-1 fw-bold">3. Chest (ทรวงอก)</label>
+                            <select class="form-select ais-select" id="ais_chest" onchange="calcTRISS()">
+                                <option value="0">0 - ไม่มีการบาดเจ็บ</option>
+                                <option value="1">1 - Minor (เล็กน้อย)</option>
+                                <option value="2">2 - Moderate (ปานกลาง)</option>
+                                <option value="3">3 - Serious (มากแต่ไม่คุกคามชีวิต)</option>
+                                <option value="4">4 - Severe (มากและคุกคามต่อชีวิต)</option>
+                                <option value="5">5 - Critical (วิกฤต ไม่แน่ใจโอกาสรอด)</option>
+                                <option value="6">6 - Maximum (รุนแรงที่สุด -> ISS = 75)</option>
+                                <option value="9">9 - Unknown (ไม่ทราบว่าบาดเจ็บหรือไม่)</option>
+                            </select>
                         </div>
-                        <div class="col-md-4 mt-2">
-                            <label class="form-label small mb-1">Abdomen / Pelvic</label>
-                            <input type="number" class="form-control ais-input" id="ais_abdomen" onchange="calcTRISS()">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1 fw-bold">4. Abdomen / Pelvic contents (ช่องท้อง)</label>
+                            <select class="form-select ais-select" id="ais_abdomen" onchange="calcTRISS()">
+                                <option value="0">0 - ไม่มีการบาดเจ็บ</option>
+                                <option value="1">1 - Minor (เล็กน้อย)</option>
+                                <option value="2">2 - Moderate (ปานกลาง)</option>
+                                <option value="3">3 - Serious (มากแต่ไม่คุกคามชีวิต)</option>
+                                <option value="4">4 - Severe (มากและคุกคามต่อชีวิต)</option>
+                                <option value="5">5 - Critical (วิกฤต ไม่แน่ใจโอกาสรอด)</option>
+                                <option value="6">6 - Maximum (รุนแรงที่สุด -> ISS = 75)</option>
+                                <option value="9">9 - Unknown (ไม่ทราบว่าบาดเจ็บหรือไม่)</option>
+                            </select>
                         </div>
-                        <div class="col-md-4 mt-2">
-                            <label class="form-label small mb-1">Extremities</label>
-                            <input type="number" class="form-control ais-input" id="ais_extremities" onchange="calcTRISS()">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1 fw-bold">5. Extremities / Pelvic girdle (แขนขา/เชิงกราน)</label>
+                            <select class="form-select ais-select" id="ais_ext" onchange="calcTRISS()">
+                                <option value="0">0 - ไม่มีการบาดเจ็บ</option>
+                                <option value="1">1 - Minor (เล็กน้อย)</option>
+                                <option value="2">2 - Moderate (ปานกลาง)</option>
+                                <option value="3">3 - Serious (มากแต่ไม่คุกคามชีวิต)</option>
+                                <option value="4">4 - Severe (มากและคุกคามต่อชีวิต)</option>
+                                <option value="5">5 - Critical (วิกฤต ไม่แน่ใจโอกาสรอด)</option>
+                                <option value="6">6 - Maximum (รุนแรงที่สุด -> ISS = 75)</option>
+                                <option value="9">9 - Unknown (ไม่ทราบว่าบาดเจ็บหรือไม่)</option>
+                            </select>
                         </div>
-                        <div class="col-md-4 mt-2">
-                            <label class="form-label small mb-1">External</label>
-                            <input type="number" class="form-control ais-input" id="ais_external" onchange="calcTRISS()">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1 fw-bold">6. External and body surface (ผิวหนังภายนอก)</label>
+                            <select class="form-select ais-select" id="ais_external" onchange="calcTRISS()">
+                                <option value="0">0 - ไม่มีการบาดเจ็บ</option>
+                                <option value="1">1 - Minor (เล็กน้อย)</option>
+                                <option value="2">2 - Moderate (ปานกลาง)</option>
+                                <option value="3">3 - Serious (มากแต่ไม่คุกคามชีวิต)</option>
+                                <option value="4">4 - Severe (มากและคุกคามต่อชีวิต)</option>
+                                <option value="5">5 - Critical (วิกฤต ไม่แน่ใจโอกาสรอด)</option>
+                                <option value="6">6 - Maximum (รุนแรงที่สุด -> ISS = 75)</option>
+                                <option value="9">9 - Unknown (ไม่ทราบว่าบาดเจ็บหรือไม่)</option>
+                            </select>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- ส่วนกล่องแสดงผลคะแนนรวม TRISS -->
+            <!-- กล่องแสดงผลคะแนน TRISS -->
             <div class="row text-center mt-4 mb-5">
                 <div class="col-md-4 mb-3">
-                    <div class="card border-primary" style="background-color: #f0f8ff;">
+                    <div class="card border-primary" style="background-color: #f0f7ff;">
                         <div class="card-body d-flex flex-column justify-content-center" style="height: 100px;">
                             <div class="fw-bold text-dark">RTS Score</div>
                             <h3 class="text-primary fw-bold mb-0" id="outRTS">0.00</h3>
@@ -200,7 +285,7 @@
                     </div>
                 </div>
                 <div class="col-md-4 mb-3">
-                    <div class="card border-primary" style="background-color: #f0f8ff;">
+                    <div class="card border-primary" style="background-color: #f0f7ff;">
                         <div class="card-body d-flex flex-column justify-content-center" style="height: 100px;">
                             <div class="fw-bold text-dark">ISS Score</div>
                             <h3 class="text-primary fw-bold mb-0" id="outISS">0</h3>
@@ -208,21 +293,19 @@
                     </div>
                 </div>
                 <div class="col-md-4 mb-3">
-                    <div class="card border-primary" style="background-color: #f0f8ff;">
+                    <div class="card border-primary" style="background-color: #f0f7ff;">
                         <div class="card-body d-flex flex-column justify-content-center" style="height: 100px;">
                             <div class="fw-bold text-dark">% รอดชีวิต (TRISS)</div>
-                            <h3 class="text-primary fw-bold mb-0" id="outTRISS">0.00%</h3>
+                            <h3 class="text-primary fw-bold mb-0" id="outTRISS">98.80%</h3>
                         </div>
                     </div>
                 </div>
             </div>
         </div> <!-- ปิดแท็บ 1 TRISS -->
 
-        <!-- ==========================================
-             TAB 2 : คะแนน APACHE II
-        =========================================== -->
+        <!-- ==================== แท็บที่ 2: คำนวณคะแนน APACHE II ==================== -->
         <div class="tab-pane fade" id="tab-apache">
-            <div class="card border-success mb-4">
+            <div class="card border-success mb-3">
                 <div class="card-header bg-success text-white fw-bold">
                     คำนวณคะแนน APACHE II (กรอกค่าที่แย่ที่สุดใน 24 ชม. แรกหลังรับเข้า ICU)
                 </div>
@@ -240,28 +323,28 @@
                         </div>
                     </div>
 
-                    <!-- 1. สัญญาณชีพ -->
+                    <!-- 1. สัญญาณชีพ: T -> HR -> RR -> SBP -> DBP -> MAP -->
                     <h6 class="text-success fw-bold border-bottom pb-2">สัญญาณชีพ (Vital Signs)</h6>
                     <div class="row mb-4 g-2">
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Temp (°C)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_temp" onchange="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control" id="ap_temp" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">HR (/min)</label>
-                            <input type="number" class="form-control" id="ap_hr" onchange="calcAPACHE()">
+                            <input type="number" class="form-control" id="ap_hr" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">RR (/min)</label>
-                            <input type="number" class="form-control" id="ap_rr" onchange="calcAPACHE()">
+                            <input type="number" class="form-control" id="ap_rr" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">SBP (mmHg)</label>
-                            <input type="number" class="form-control" id="ap_sbp" oninput="calculateMAP()" onchange="calcAPACHE()">
+                            <input type="number" class="form-control" id="ap_sbp" oninput="calculateMAP()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">DBP (mmHg)</label>
-                            <input type="number" class="form-control" id="ap_dbp" oninput="calculateMAP()" onchange="calcAPACHE()">
+                            <input type="number" class="form-control" id="ap_dbp" oninput="calculateMAP()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">MAP (auto)</label>
@@ -269,45 +352,84 @@
                         </div>
                     </div>
 
-                    <!-- 2. ก๊าซในเลือด (ABG) -->
-                    <h6 class="text-success fw-bold border-bottom pb-2">ก๊าซในเลือด (ABG)</h6>
-                    <div class="row mb-4 g-2">
-                        <div class="col-md-2">
-                            <label class="form-label small mb-1">FiO2 (%)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_fio2" onchange="calcAPACHE()">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small mb-1">PaO2</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_pao2" onchange="calcAPACHE()">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small mb-1">PaCO2</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_paco2" onchange="calcAPACHE()">
-                        </div>
-                        <div class="col-md-2">
+                    <!-- 2. ก๊าซในเลือด + ความรู้สึกตัว: pH -> PaCO2 -> PaO2 -> FiO2 -> E -> V -> M -->
+                    <h6 class="text-success fw-bold border-bottom pb-2">ก๊าซในเลือด + ความรู้สึกตัว (ABG & GCS)</h6>
+                    <div class="row mb-4 g-2 align-items-end">
+                        <div class="col-md-3">
                             <label class="form-label small mb-1">pH</label>
-                            <input type="number" step="0.01" class="form-control" id="ap_ph" onchange="calcAPACHE()">
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="ap_ph" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label small mb-1">Serum HCO3 (กรณีไม่มี ABG)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_hco3" onchange="calcAPACHE()">
+                            <label class="form-label small mb-1">PaCO2</label>
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_paco2" oninput="calcAPACHE()">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">PaO2</label>
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_pao2" oninput="calcAPACHE()">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">FiO2 (%)</label>
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_fio2" oninput="calcAPACHE()">
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label class="form-label small mb-1 fw-bold">Eye (E : การลืมตา)</label>
+                            <select class="form-select form-select-sm" id="ap_e" onchange="calcAPACHE()">
+                                <option value="">-- เลือกการลืมตา (E) --</option>
+                                <option value="4">4 = ลืมตาได้เองตามปกติ</option>
+                                <option value="3">3 = ลืมตาเมื่อเรียกชื่อ/พูดด้วย</option>
+                                <option value="2">2 = ลืมตาเมื่อกระตุ้นให้เจ็บ</option>
+                                <option value="1">1 = ไม่ลืมตาเลย</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label class="form-label small mb-1 fw-bold">Verbal (V : การพูดคุย)</label>
+                            <select class="form-select form-select-sm" id="ap_v" onchange="calcAPACHE()">
+                                <option value="">-- เลือกการพูดคุย (V) --</option>
+                                <option value="5">5 = พูดคุยรู้เรื่อง บอกเวลา/สถานที่ถูก</option>
+                                <option value="4">4 = พูดคุยสับสน แต่ตอบเป็นประโยคได้</option>
+                                <option value="3">3 = พูดเป็นคำๆ ไม่เป็นประโยค</option>
+                                <option value="2">2 = ส่งเสียงคราง ไม่เป็นคำพูด</option>
+                                <option value="1">1 = ไม่ส่งเสียงเลย / ใส่ท่อช่วยหายใจ (ETT)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mt-2">
+                            <label class="form-label small mb-1 fw-bold">Motor (M : การเคลื่อนไหว) <span id="ap_gcs_badge" class="badge bg-success ms-1">รวม GCS: -</span></label>
+                            <select class="form-select form-select-sm" id="ap_m" onchange="calcAPACHE()">
+                                <option value="">-- เลือกการเคลื่อนไหว (M) --</option>
+                                <option value="6">6 = ทำตามคำสั่งได้ถูกต้อง</option>
+                                <option value="5">5 = ทราบจุดที่เจ็บ ยกมือปัดป้องได้</option>
+                                <option value="4">4 = ชักแขนขาหนีเมื่อกระตุ้นให้เจ็บ</option>
+                                <option value="3">3 = แขนงอเกร็งผิดปกติ (Decorticate)</option>
+                                <option value="2">2 = แขนขาเหยียดเกร็ง (Decerebrate)</option>
+                                <option value="1">1 = ไม่เคลื่อนไหวเลย</option>
+                            </select>
+                            <input type="hidden" id="ap_gcs">
+                            <input type="hidden" id="ap_hco3">
                         </div>
                     </div>
 
-                    <!-- 3. ผลแล็บ และความรู้สึกตัว -->
-                    <h6 class="text-success fw-bold border-bottom pb-2">ผลแล็บ และความรู้สึกตัว</h6>
+                    <!-- 3. ผลแล็บ: Hct -> WBC -> Na -> K -> Cr -> เป็นไตวายเฉียบพลัน (ARF) -->
+                    <h6 class="text-success fw-bold border-bottom pb-2">ผล Lab</h6>
                     <div class="row mb-3 g-2 align-items-end">
                         <div class="col-md-2">
+                            <label class="form-label small mb-1">Hct (%)</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_hct" oninput="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">WBC</label>
+                            <input type="number" step="0.1" class="form-control" id="ap_wbc" oninput="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
                             <label class="form-label small mb-1">Sodium (Na)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_na" onchange="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control" id="ap_na" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Potassium (K)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_k" onchange="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control" id="ap_k" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Creatinine (Cr)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_cr" onchange="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control" id="ap_cr" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <div class="form-check mb-2">
@@ -315,24 +437,12 @@
                                 <label class="form-check-label text-danger small fw-bold" for="ap_arf">เป็นไตวายเฉียบพลัน (ARF)</label>
                             </div>
                         </div>
-                        <div class="col-md-1">
-                            <label class="form-label small mb-1">Hct (%)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_hct" onchange="calcAPACHE()">
-                        </div>
-                        <div class="col-md-1">
-                            <label class="form-label small mb-1">WBC</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_wbc" onchange="calcAPACHE()">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small mb-1">GCS (3-15)</label>
-                            <input type="number" class="form-control" id="ap_gcs" onchange="calcAPACHE()">
-                        </div>
                     </div>
 
                 </div>
             </div>
 
-            <!-- ส่วนกล่องแสดงผลคะแนนรวม (สีเหลือง) -->
+            <!-- ส่วนกล่องแสดงผลคะแนนรวม APACHE II (สีเหลือง) -->
             <div class="row text-center mt-4 mb-5">
                 <div class="col-md-4 mb-3">
                     <div class="card border-warning" style="background-color: #fff9e6;">
@@ -731,23 +841,121 @@
 
     function toggleSepsisDetail() { document.getElementById('sepsisSourceBox').style.display = document.getElementById('hasSepsis').checked ? 'block' : 'none'; }
 
-    // สูตรคำนวณ TRISS แบบเต็มรูปแบบ
+    // =========================================================
+    // 1. ฟังก์ชันคำนวณ TRISS Score (RTS + ISS + % Survival)
+    // =========================================================
     function calcTRISS() {
-        let gcs = parseInt(document.getElementById('er_gcs').value) || 0;
-        let sbp = parseInt(document.getElementById('er_sbp').value) || 0;
-        let rr = parseInt(document.getElementById('er_rr').value) || 0;
-        let rts = (gcs>0||sbp>0||rr>0) ? ((0.9368*(gcs>=13?4:gcs>=9?3:gcs>=6?2:gcs>=4?1:0)) + (0.7326*(sbp>89?4:sbp>76?3:sbp>49?2:sbp>0?1:0)) + (0.2908*((rr>10&&rr<30)?4:rr>29?3:(rr>5&&rr<10)?2:(rr>0&&rr<6)?1:0))) : 0;
+        // 1.1 คำนวณ GCS จาก Dropdown E + V + M และแปลงเป็น Code V ตามตาราง
+        const e = parseInt(document.getElementById('triss_e').value);
+        const v = parseInt(document.getElementById('triss_v').value);
+        const m = parseInt(document.getElementById('triss_m').value);
+
+        let gcsCode = 0;
+        if (!isNaN(e) && !isNaN(v) && !isNaN(m)) {
+            const gcsSum = e + v + m;
+            if (gcsSum >= 13) gcsCode = 4;
+            else if (gcsSum >= 9) gcsCode = 3;
+            else if (gcsSum >= 6) gcsCode = 2;
+            else if (gcsSum >= 4) gcsCode = 1;
+            else gcsCode = 0; // GCS = 3 ได้ Code 0
+            document.getElementById('triss_gcs_display').value = `${gcsSum} (Code ${gcsCode})`;
+        } else {
+            document.getElementById('triss_gcs_display').value = '-';
+        }
+
+        // 1.2 แปลงค่า SBP เป็น Code V ตามตาราง
+        const sbp = parseFloat(document.getElementById('triss_sbp').value);
+        let sbpCode = 0;
+        if (!isNaN(sbp)) {
+            if (sbp > 89) sbpCode = 4;
+            else if (sbp >= 76) sbpCode = 3;
+            else if (sbp >= 50) sbpCode = 2;
+            else if (sbp >= 1) sbpCode = 1;
+            else sbpCode = 0;
+            document.getElementById('triss_sbp_code').innerText = `Code: ${sbpCode}`;
+        } else {
+            document.getElementById('triss_sbp_code').innerText = 'Code: -';
+        }
+
+        // 1.3 แปลงค่า RR เป็น Code V ตามตาราง
+        const rr = parseFloat(document.getElementById('triss_rr').value);
+        let rrCode = 0;
+        if (!isNaN(rr)) {
+            if (rr >= 10 && rr <= 29) rrCode = 4;
+            else if (rr > 29) rrCode = 3;
+            else if (rr >= 6 && rr <= 9) rrCode = 2;
+            else if (rr >= 1 && rr <= 5) rrCode = 1;
+            else rrCode = 0;
+            document.getElementById('triss_rr_code').innerText = `Code: ${rrCode}`;
+        } else {
+            document.getElementById('triss_rr_code').innerText = 'Code: -';
+        }
+
+        // คำนวณ RTS = (0.9368 * GCS_code) + (0.7326 * SBP_code) + (0.2908 * RR_code)
+        const rts = (0.9368 * gcsCode) + (0.7326 * sbpCode) + (0.2908 * rrCode);
         document.getElementById('outRTS').innerText = rts.toFixed(2);
-        
-        let aisVals = Array.from(document.querySelectorAll('.ais-input')).map(i=>parseInt(i.value)||0).sort((a,b)=>b-a);
-        let iss = (aisVals[0]*aisVals[0]) + (aisVals[1]*aisVals[1]) + (aisVals[2]*aisVals[2]);
+
+        // 1.4 คำนวณ ISS จาก 6 อวัยวะ (ถ้ามีอวัยวะใดได้ 6 = Maximum ให้ ISS = 75 ทันที)
+        const organIds = ['ais_head', 'ais_face', 'ais_chest', 'ais_abdomen', 'ais_ext', 'ais_external'];
+        let scores = [];
+        let hasMaxSix = false;
+
+        organIds.forEach(id => {
+            const val = parseInt(document.getElementById(id).value) || 0;
+            if (val === 6) {
+                hasMaxSix = true;
+            } else if (val >= 1 && val <= 5) {
+                // เก็บเฉพาะค่า 1-5 (ส่วนรหัส 9 = Unknown จะไม่นำมาคำนวณ)
+                scores.push(val);
+            }
+        });
+
+        let iss = 0;
+        if (hasMaxSix) {
+            iss = 75;
+        } else {
+            // เรียงจากมากไปน้อย เลือกสูงสุด 3 อวัยวะ มายกกำลังสองบวกกัน
+            scores.sort((a, b) => b - a);
+            const top3 = scores.slice(0, 3);
+            iss = top3.reduce((sum, v) => sum + (v * v), 0);
+        }
         document.getElementById('outISS').innerText = iss;
-        
-        let b = (document.getElementById('traumaType').value==='blunt') ? -0.4499+(0.8085*rts)-(0.0835*iss)-(1.7430*((parseInt(document.getElementById('age').value)||0)>54?1:0)) : -2.5355+(0.9934*rts)-(0.0651*iss)-(1.1360*((parseInt(document.getElementById('age').value)||0)>54?1:0));
-        document.getElementById('outTRISS').innerText = (rts>0||iss>0) ? ((1/(1+Math.exp(-b)))*100).toFixed(2)+'%' : '0.00%';
+
+        // 1.5 คำนวณ % รอดชีวิต (TRISS Survival Probability)
+        const age = parseInt(document.getElementById('age').value) || 0;
+        const ageIndex = (age >= 55) ? 1 : 0;
+        const type = document.getElementById('triss_type').value;
+
+        let b0, b1, b2, b3;
+        if (type === 'penetrating') {
+            b0 = -2.5355; b1 = 0.9934; b2 = -0.0651; b3 = -1.1360;
+        } else {
+            // Blunt (กระแทก)
+            b0 = -0.4499; b1 = 0.8085; b2 = -0.0835; b3 = -1.7430;
+        }
+
+        const b = b0 + (b1 * rts) + (b2 * iss) + (b3 * ageIndex);
+        const ps = (1 / (1 + Math.exp(-b))) * 100;
+        document.getElementById('outTRISS').innerText = ps.toFixed(2) + '%';
     }
 
-    // สูตรคำนวณ APACHE II แบบเต็มรูปแบบ
+    // =========================================================
+    // 2. ฟังก์ชันคำนวณ MAP และ APACHE II Score
+    // =========================================================
+    function calculateMAP() {
+        const sbp = parseFloat(document.getElementById('ap_sbp').value);
+        const dbp = parseFloat(document.getElementById('ap_dbp').value);
+        if (!isNaN(sbp) && !isNaN(dbp)) {
+            const map = ((2 * dbp) + sbp) / 3;
+            document.getElementById('ap_map').value = map.toFixed(2);
+            document.getElementById('outMAP').innerText = map.toFixed(1);
+        } else {
+            document.getElementById('ap_map').value = '';
+            document.getElementById('outMAP').innerText = '-';
+        }
+        calcAPACHE();
+    }
+
     function calcAPACHE() {
         let score = 0;
 
@@ -834,9 +1042,8 @@
             }
         }
 
-        // 8. ความเป็นกรด-ด่างในเลือด (pH หรือใช้ Serum HCO3 กรณีไม่มี ABG) [เพิ่มใหม่]
+        // 8. ความเป็นกรด-ด่างในเลือด (pH)
         let ph = parseFloat(document.getElementById('ap_ph').value);
-        let hco3 = parseFloat(document.getElementById('ap_hco3').value);
         if (!isNaN(ph)) {
             if (ph >= 7.7) score += 4;
             else if (ph >= 7.6) score += 3;
@@ -845,17 +1052,9 @@
             else if (ph >= 7.25) score += 2;
             else if (ph >= 7.15) score += 3;
             else score += 4;
-        } else if (!isNaN(hco3)) {
-            if (hco3 >= 52) score += 4;
-            else if (hco3 >= 41) score += 3;
-            else if (hco3 >= 32) score += 1;
-            else if (hco3 >= 22) score += 0;
-            else if (hco3 >= 18) score += 2;
-            else if (hco3 >= 15) score += 3;
-            else score += 4;
         }
 
-        // 9. โซเดียม (Sodium: Na) [เพิ่มใหม่]
+        // 9. โซเดียม (Sodium: Na)
         let na = parseFloat(document.getElementById('ap_na').value);
         if (!isNaN(na)) {
             if (na >= 180) score += 4;
@@ -868,7 +1067,7 @@
             else score += 4;
         }
 
-        // 10. โพแทสเซียม (Potassium: K) [เพิ่มใหม่]
+        // 10. โพแทสเซียม (Potassium: K)
         let k = parseFloat(document.getElementById('ap_k').value);
         if (!isNaN(k)) {
             if (k >= 7.0) score += 4;
@@ -880,7 +1079,7 @@
             else score += 4;
         }
 
-        // 11. การทำงานของไต (Creatinine: Cr) [แก้เกณฑ์ 1.5-1.9 ให้ถูกต้อง]
+        // 11. การทำงานของไต (Creatinine: Cr)
         let cr = parseFloat(document.getElementById('ap_cr').value);
         let arf = document.getElementById('ap_arf').checked;
         if (!isNaN(cr)) {
@@ -894,7 +1093,7 @@
             score += cr_score;
         }
 
-        // 12. ความเข้มข้นของเลือด (Hct %) [เพิ่มใหม่]
+        // 12. ความเข้มข้นของเลือด (Hct %)
         let hct = parseFloat(document.getElementById('ap_hct').value);
         if (!isNaN(hct)) {
             if (hct >= 60) score += 4;
@@ -905,7 +1104,7 @@
             else score += 4;
         }
 
-        // 13. เม็ดเลือดขาว (WBC) [เพิ่มใหม่ - รองรับทั้ง 21.9 และ 21900]
+        // 13. เม็ดเลือดขาว (WBC)
         let wbc = parseFloat(document.getElementById('ap_wbc').value);
         if (!isNaN(wbc)) {
             if (wbc > 500) wbc = wbc / 1000;
@@ -917,17 +1116,23 @@
             else score += 4;
         }
 
-        // 14. ระดับความรู้สึกตัว (GCS 3-15)
-        let gcs = parseFloat(document.getElementById('ap_gcs').value);
-        if (!isNaN(gcs) && gcs >= 3 && gcs <= 15) {
-            score += (15 - gcs);
+        // 14. ระดับความรู้สึกตัว (GCS จาก Dropdown E + V + M)
+        const apE = parseInt(document.getElementById('ap_e').value);
+        const apV = parseInt(document.getElementById('ap_v').value);
+        const apM = parseInt(document.getElementById('ap_m').value);
+        if (!isNaN(apE) && !isNaN(apV) && !isNaN(apM)) {
+            const gcsTotal = apE + apV + apM;
+            document.getElementById('ap_gcs').value = gcsTotal;
+            document.getElementById('ap_gcs_badge').innerText = `GCS: ${gcsTotal}`;
+            score += (15 - gcsTotal);
+        } else {
+            document.getElementById('ap_gcs_badge').innerText = 'GCS: -';
         }
 
         // แสดงผลคะแนนรวมและคาดการณ์เสียชีวิต
         document.getElementById('outAPACHE').innerText = score;
         let risk = Math.exp(-3.517 + (score * 0.146)) / (1 + Math.exp(-3.517 + (score * 0.146)));
-        let bracket = score <= 4 ? '4%' : score <= 9 ? '8%' : score <= 14 ? '15%' : score <= 19 ? '25%' : score <= 24 ? '40%' : score <= 29 ? '55%' : score <= 34 ? '75%' : '85%';
-        document.getElementById('outMortality').innerText = `~${bracket} (${(risk * 100).toFixed(1)}%)`;
+        document.getElementById('outMortality').innerText = (risk * 100).toFixed(2) + "%";
     }
 
     function addDeviceRow(containerId, defaultOn = '', defaultOff = '') {
