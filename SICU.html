@@ -408,31 +408,35 @@
                         </div>
                     </div>
 
-                    <!-- 3. ผลแล็บ: Hct -> WBC -> Na -> K -> Cr -> เป็นไตวายเฉียบพลัน (ARF) -->
+                   <!-- 3. ผลแล็บ: Hct -> WBC -> Na -> K -> HCO3 -> Cr -> ARF -->
                     <h6 class="text-success fw-bold border-bottom pb-2">ผล Lab</h6>
                     <div class="row mb-3 g-2 align-items-end">
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Hct (%)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_hct" oninput="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_hct" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">WBC</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_wbc" oninput="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_wbc" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Sodium (Na)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_na" oninput="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_na" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Potassium (K)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_k" oninput="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_k" oninput="calcAPACHE()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">HCO3 (ไม่มี ABG)</label>
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_hco3" oninput="calcAPACHE()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Creatinine (Cr)</label>
-                            <input type="number" step="0.1" class="form-control" id="ap_cr" oninput="calcAPACHE()">
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_cr" oninput="calcAPACHE()">
                         </div>
-                        <div class="col-md-2">
-                            <div class="form-check mb-2">
+                        <div class="col-12 mt-2">
+                            <div class="form-check">
                                 <input class="form-check-input border-danger" type="checkbox" id="ap_arf" onchange="calcAPACHE()">
                                 <label class="form-check-label text-danger small fw-bold" for="ap_arf">เป็นไตวายเฉียบพลัน (ARF)</label>
                             </div>
