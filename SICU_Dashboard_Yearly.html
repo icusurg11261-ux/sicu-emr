@@ -307,9 +307,9 @@
     }
 
     function updateDashboard(activePatients, monthsArray, filterStartDate, filterEndDate) {
-        let total = activePatients.length; // นับยอดผู้ป่วยรวมยอดยกมา
+        let total = activePatients.length; 
         let kpiDeaths = 0;
-        let kpiSumLOS = 0;
+        let kpiSumLOS = 0; // วันนอนที่ตกในช่วงที่ Filter
         let patientWithComp = 0;
 
         let disStats = {}; 
@@ -321,12 +321,16 @@
             let dOut = p.discharge_date ? new Date(p.discharge_date.split('T')[0]) : new Date(2100, 0, 1);
             dIn.setHours(0,0,0,0); dOut.setHours(23,59,59,999);
 
-            // 1. คำนวณ KPI รวม (ตัด LOS เฉพาะช่วงที่เลือก)
+            // คำนวณวันนอนเฉลี่ยสำหรับ KPI ด้านบน (ตัดเฉพาะวันนอนที่ตกในขอบเขตเดือนที่เลือก)
             let overlapStart = dIn > filterStartDate ? dIn : filterStartDate;
             let overlapEnd = dOut < filterEndDate ? dOut : filterEndDate;
-            let days = Math.ceil((overlapEnd - overlapStart) / 86400000);
-            if (days === 0 && dIn >= filterStartDate && dIn <= filterEndDate) days = 1;
-            kpiSumLOS += (days || 0);
+            let days = 0;
+            if (overlapStart <= overlapEnd) {
+                let diffTime = overlapEnd - overlapStart;
+                days = Math.ceil(diffTime / 86400000); 
+                if (days === 0) days = 1;
+            }
+            kpiSumLOS += days;
 
             if (p.discharge_date && p.status === 'เสียชีวิต') {
                 let realOut = new Date(p.discharge_date.split('T')[0]);
@@ -336,28 +340,29 @@
             let cStr = p.complication || "";
             if (cStr.trim() !== "" && cStr !== "[]") patientWithComp++;
 
-            // 2. จัดกลุ่มโรค
+            // จัดกลุ่มโรคสำหรับกราฟแนวนอน
             let sysName = classifyOrganSystem(p);
             if (!disStats[sysName]) disStats[sysName] = { count: 0, deaths: 0, sumLOS: 0, sumApache: 0, apacheCount: 0 };
             disStats[sysName].count++;
             if (p.discharge_date && p.status === 'เสียชีวิต' && new Date(p.discharge_date) >= filterStartDate && new Date(p.discharge_date) <= filterEndDate) {
                 disStats[sysName].deaths++;
             }
-            disStats[sysName].sumLOS += (days || 0);
+            disStats[sysName].sumLOS += days;
+            
             let ap = parseFloat(p.apache_score);
             if (!isNaN(ap) && ap > 0) {
                 disStats[sysName].sumApache += ap;
                 disStats[sysName].apacheCount++;
             }
 
-            // 3. แยกข้อมูลรายเดือน
+            // แยกข้อมูลรายเดือน
             monthsArray.forEach(m => {
                 let mStart = new Date(m.year, m.monthIndex, 1, 0, 0, 0);
                 let mEnd = new Date(m.year, m.monthIndex + 1, 0, 23, 59, 59);
                 
                 if (dIn <= mEnd && dOut >= mStart) {
-                    monthStats[m.key].active++; // ผู้ป่วยที่มีการครองเตียงในเดือน
-                    if (dIn >= mStart && dIn <= mEnd) monthStats[m.key].admits++; // ยอดรับเข้า
+                    monthStats[m.key].active++;
+                    if (dIn >= mStart && dIn <= mEnd) monthStats[m.key].admits++;
                     
                     if (p.discharge_date && p.status === 'เสียชีวิต') {
                         let rOut = new Date(p.discharge_date.split('T')[0]);
@@ -366,9 +371,11 @@
 
                     let mOverStart = dIn > mStart ? dIn : mStart;
                     let mOverEnd = dOut < mEnd ? dOut : mEnd;
-                    let mDays = Math.ceil((mOverEnd - mOverStart) / 86400000);
-                    if (mDays === 0 && dIn >= mStart && dIn <= mEnd) mDays = 1;
-                    monthStats[m.key].sumLOS += (mDays || 0);
+                    if (mOverStart <= mOverEnd) {
+                        let mDays = Math.ceil((mOverEnd - mOverStart) / 86400000);
+                        if (mDays === 0) mDays = 1;
+                        monthStats[m.key].sumLOS += mDays;
+                    }
 
                     if (cStr.includes("VAP")) monthStats[m.key].vap++;
                     if (cStr.includes("CLABSI")) monthStats[m.key].clabsi++;
@@ -377,14 +384,13 @@
             });
         });
 
-        // อัปเดตตัวเลขในกล่อง KPI ด้านบน
+        // อัปเดต KPI กล่องสีม่วง (ใช้ kpiSumLOS ที่ตัดเฉพาะเดือนแล้ว หารด้วยผู้ป่วย)
         document.getElementById('kpiTotal').innerText = total;
         document.getElementById('kpiMortality').innerText = total > 0 ? ((kpiDeaths / total) * 100).toFixed(1) : "0.0";
         document.getElementById('kpiMortalityText').innerText = `${kpiDeaths} จาก ${total} ราย`;
-        document.getElementById('kpiLOS').innerText = total > 0 ? (kpiSumLOS / total).toFixed(1) : "0.0";
+        document.getElementById('kpiLOS').innerText = total > 0 ? (kpiSumLOS / total).toFixed(2) : "0.0";
         document.getElementById('kpiCompCount').innerText = patientWithComp;
 
-        // ข้อมูลกราฟรายเดือน (ใช้อัตราส่วนจากผู้ป่วยทั้งหมดในเดือน เพื่อให้ตรงกับ Excel)
         const chartLabels = monthsArray.map(m => m.label);
         const admitData = monthsArray.map(m => monthStats[m.key].admits);
         const mortData = monthsArray.map(m => monthStats[m.key].active > 0 ? (monthStats[m.key].deaths / monthStats[m.key].active * 100).toFixed(1) : 0);
@@ -394,7 +400,6 @@
         const clabsiData = monthsArray.map(m => monthStats[m.key].clabsi);
         const extData = monthsArray.map(m => monthStats[m.key].extubate);
 
-        // ข้อมูลกราฟแยกโรค
         let sortedDiseases = Object.keys(disStats).sort((a, b) => disStats[b].count - disStats[a].count);
         const disCountArr = sortedDiseases.map(d => disStats[d].count);
         const disDeathArr = sortedDiseases.map(d => disStats[d].deaths);
@@ -403,7 +408,6 @@
 
         const defaultFont = { family: 'sans-serif', size: 10 };
 
-        // 1. กราฟสัดส่วนกลุ่มโรค (แท่งแนวนอน)
         renderChart('chartDiseasePie', 'bar', {
             labels: sortedDiseases,
             datasets: [
@@ -416,7 +420,6 @@
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: defaultFont } } }
         });
 
-        // 2. กราฟรับเข้า/ตาย
         renderChart('chartAdmitMortality', 'bar', {
             labels: chartLabels,
             datasets: [
@@ -432,7 +435,6 @@
             plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: defaultFont } } }
         });
 
-        // 3. กราฟ LOS
         renderChart('chartLOS', 'line', {
             labels: chartLabels,
             datasets: [{ label: 'วันนอนเฉลี่ย (วัน)', data: losData, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.15)', fill: true, tension: 0.3, pointRadius: 4 }]
@@ -441,7 +443,6 @@
             plugins: { legend: { display: false } }
         });
 
-        // 4. กราฟ LOS / APACHE II แยกโรค (แก้ไขให้เป็นแนวนอนและตรงตามหัวข้อ)
         renderChart('chartDiseaseSeverity', 'bar', {
             labels: sortedDiseases,
             datasets: [
@@ -454,7 +455,6 @@
             plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: defaultFont } } }
         });
 
-        // 5. กราฟความเสี่ยง
         renderChart('chartComplications', 'bar', {
             labels: chartLabels,
             datasets: [
@@ -471,6 +471,7 @@
         });
     }
 
+    // แก้ไขปีในฟังก์ชันสร้างตารางสรุป 14 ข้อ ให้เป็นปีงบประมาณที่ถูกต้อง
     function renderYearlyTable(data) {
         const tbody = document.getElementById('yearlyStatsBody');
         tbody.innerHTML = '';
@@ -483,8 +484,16 @@
         ];
 
         let bedCount = 8;
-        let filterEnd = document.getElementById('filterEndMonth').value || "2026-09";
-        let targetYearCE = parseInt(filterEnd.split('-')[0]);
+        
+        // ดึงปีที่ถูกกรองมาใช้ ถ้าช่องกรองว่างให้ใช้ปีปัจจุบัน
+        let filterEnd = document.getElementById('filterEndMonth').value;
+        let targetYearCE = new Date().getFullYear();
+        if (filterEnd) {
+            targetYearCE = parseInt(filterEnd.split('-')[0]);
+            let filterMonth = parseInt(filterEnd.split('-')[1]);
+            // ถ้า Filter อยู่ในเดือน ต.ค.-ธ.ค. แปลว่าเป็นปีงบประมาณของปีถัดไป (เช่น ต.ค. 2026 = ปีงบ 2027)
+            if (filterMonth >= 10) targetYearCE += 1;
+        }
 
         let rowsData = {
             1: new Array(12).fill(0), 2: new Array(12).fill(0), 3: new Array(12).fill(0),
@@ -497,6 +506,7 @@
         fiscalMonths.forEach((fm, colIdx) => {
             let admitsNew = 0, admitsMove = 0, dcTotal = 0, dcMove = 0, dcHome = 0, dcRefer = 0, dcDeath = 0, sumLosMonth = 0, carryOver = 0;
             
+            // สำคัญ: การกำหนดปีสำหรับแต่ละเดือนในตาราง (ต.ค.-ธ.ค. ใช้ปีงบ - 1, ส่วน ม.ค.-ก.ย. ใช้ปีงบพอดี)
             let yCE = fm.m >= 9 ? targetYearCE - 1 : targetYearCE;
             let monthStart = new Date(yCE, fm.m, 1, 0, 0, 0);
             let monthEnd = new Date(yCE, fm.m + 1, 0, 23, 59, 59);
@@ -666,3 +676,5 @@
         charts[canvasId] = new Chart(ctx, { type: type, data: data, options: { ...baseOptions, ...extraOptions } });
     }
 </script>
+</body>
+</html>
