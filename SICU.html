@@ -408,9 +408,9 @@
                         </div>
                     </div>
 
-                   <!-- 3. ผล Lab: Hct -> WBC -> Na -> K -> HCO3 -> Cr (รวม ARF แถวเดียวกัน) -->
-                    <h6 class="text-success fw-bold border-bottom pb-2">ผล Lab</h6>
-                    <div class="row mb-3 g-2 align-items-center">
+                   <!-- 3. ผล Lab: Hct -> WBC -> Na -> K -> HCO3 -> Cr + ARF (แถวเดียวกัน) -->
+                    <h6 class="text-success fw-bold border-bottom pb-2 mt-4">ผล Lab</h6>
+                    <div class="row mb-3 g-2 align-items-end">
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Hct (%)</label>
                             <input type="number" step="0.1" class="form-control form-control-sm" id="ap_hct" oninput="calcAPACHE()">
@@ -431,18 +431,19 @@
                             <label class="form-label small mb-1">HCO3 (ไม่มี ABG)</label>
                             <input type="number" step="0.1" class="form-control form-control-sm" id="ap_hco3" oninput="calcAPACHE()">
                         </div>
+                        <!-- รวมช่อง Cr และติ๊ก ARF ไว้ในคอลัมน์เดียวกัน -->
                         <div class="col-md-2">
                             <label class="form-label small mb-1">Creatinine (Cr)</label>
-                            <input type="number" step="0.1" class="form-control form-control-sm" id="ap_cr" oninput="calcAPACHE()">
-                        </div>
-                        <div class="col-12 mt-2">
-                            <div class="form-check">
-                                <input class="form-check-input border-danger" type="checkbox" id="ap_arf" onchange="calcAPACHE()">
-                                <label class="form-check-label text-danger small fw-bold" for="ap_arf">เป็นไตวายเฉียบพลัน (ARF)</label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" step="0.1" class="form-control" id="ap_cr" oninput="calcAPACHE()">
+                                <div class="input-group-text bg-white border-start-0" style="padding-left: 5px; padding-right: 5px;">
+                                    <input class="form-check-input mt-0 border-danger" type="checkbox" id="ap_arf" onchange="calcAPACHE()" title="ไตวายเฉียบพลัน (ARF)" style="cursor: pointer;">
+                                    <label class="form-check-label text-danger small fw-bold ms-1" for="ap_arf" style="font-size: 0.75rem; cursor: pointer;">ARF</label>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    
+
                 </div>
             </div>
 
