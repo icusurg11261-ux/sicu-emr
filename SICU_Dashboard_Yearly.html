@@ -306,10 +306,49 @@
         renderYearlyTable(allPatients); // ตารางส่งยอดคนไข้ทั้งหมดไปคัดแยกเองแบบรายเดือน
     }
 
+// -------------------------------------------------------------
+    // ฟังก์ชันคำนวณวันนอน (LOS) แบบ "เข้านับ-ออกไม่นับ" ตรงตามระเบียบ สธ.
+    // -------------------------------------------------------------
+    function calcDaysStrict(startStr, endStr, filterStart, filterEnd) {
+        if (!startStr) return 0;
+        let dIn = new Date(startStr.split('T')[0]);
+        let dOut = endStr ? new Date(endStr.split('T')[0]) : new Date(2100, 0, 1);
+        
+        // ตัดเวลาทิ้งให้เหลือแค่วันที่ (เวลาเที่ยงคืนตรง)
+        dIn.setHours(0,0,0,0);
+        dOut.setHours(0,0,0,0);
+        filterStart.setHours(0,0,0,0);
+        filterEnd.setHours(0,0,0,0);
+
+        if (dIn > filterEnd || dOut < filterStart) return 0; // ไม่เกี่ยวข้องกัน
+
+        let overlapStart = dIn > filterStart ? dIn : filterStart;
+        let overlapEnd = dOut < filterEnd ? dOut : filterEnd;
+
+        // หลักการ "เข้านับ ออกไม่นับ" (นับจำนวนคืนที่นอน)
+        let diffTime = overlapEnd - overlapStart;
+        let days = Math.floor(diffTime / 86400000); 
+
+        // กรณีเข้า-ออกวันเดียวกันในเดือนนั้นๆ (ยังไม่ข้ามคืน) ให้นับเป็น 1 วัน
+        if (days === 0 && dIn.getTime() === dOut.getTime() && dIn >= filterStart && dIn <= filterEnd) {
+            days = 1;
+        }
+        
+        // หากวันที่ออกเป็นวันเดียวกันกับวันที่เริ่มเดือน หรือคนไข้นอนข้ามเดือนแล้วออกวันที่ 1
+        // และไม่ได้เพิ่งแอดมิทวันที่ 1 ให้นับเป็น 0 วันสำหรับเดือนนี้ (เพราะคิดของเดือนก่อนไปแล้ว)
+        if (days === 0 && overlapStart.getTime() === filterStart.getTime() && dIn < filterStart) {
+            days = 0; 
+        } else if (days === 0 && overlapStart < overlapEnd) {
+            days = 1;
+        }
+
+        return days > 0 ? days : 0;
+    }
+
     function updateDashboard(activePatients, monthsArray, filterStartDate, filterEndDate) {
         let total = activePatients.length; 
         let kpiDeaths = 0;
-        let kpiSumLOS = 0; // วันนอนที่ตกในช่วงที่ Filter
+        let kpiSumLOS = 0; 
         let patientWithComp = 0;
 
         let disStats = {}; 
@@ -317,35 +356,26 @@
         monthsArray.forEach(m => { monthStats[m.key] = { active: 0, admits: 0, deaths: 0, sumLOS: 0, vap: 0, clabsi: 0, extubate: 0 }; });
 
         activePatients.forEach(p => {
-            let dIn = new Date(p.icu_in_date.split('T')[0]);
-            let dOut = p.discharge_date ? new Date(p.discharge_date.split('T')[0]) : new Date(2100, 0, 1);
-            dIn.setHours(0,0,0,0); dOut.setHours(23,59,59,999);
-
-            // คำนวณวันนอนเฉลี่ยสำหรับ KPI ด้านบน (ตัดเฉพาะวันนอนที่ตกในขอบเขตเดือนที่เลือก)
-            let overlapStart = dIn > filterStartDate ? dIn : filterStartDate;
-            let overlapEnd = dOut < filterEndDate ? dOut : filterEndDate;
-            let days = 0;
-            if (overlapStart <= overlapEnd) {
-                let diffTime = overlapEnd - overlapStart;
-                days = Math.ceil(diffTime / 86400000); 
-                if (days === 0) days = 1;
-            }
+            // นับวันนอนผ่านฟังก์ชันใหม่
+            let days = calcDaysStrict(p.icu_in_date, p.discharge_date, filterStartDate, filterEndDate);
             kpiSumLOS += days;
 
             if (p.discharge_date && p.status === 'เสียชีวิต') {
                 let realOut = new Date(p.discharge_date.split('T')[0]);
+                realOut.setHours(0,0,0,0);
                 if (realOut >= filterStartDate && realOut <= filterEndDate) kpiDeaths++;
             }
 
             let cStr = p.complication || "";
             if (cStr.trim() !== "" && cStr !== "[]") patientWithComp++;
 
-            // จัดกลุ่มโรคสำหรับกราฟแนวนอน
             let sysName = classifyOrganSystem(p);
             if (!disStats[sysName]) disStats[sysName] = { count: 0, deaths: 0, sumLOS: 0, sumApache: 0, apacheCount: 0 };
             disStats[sysName].count++;
-            if (p.discharge_date && p.status === 'เสียชีวิต' && new Date(p.discharge_date) >= filterStartDate && new Date(p.discharge_date) <= filterEndDate) {
-                disStats[sysName].deaths++;
+            if (p.discharge_date && p.status === 'เสียชีวิต') {
+                let realOut = new Date(p.discharge_date.split('T')[0]);
+                realOut.setHours(0,0,0,0);
+                if (realOut >= filterStartDate && realOut <= filterEndDate) disStats[sysName].deaths++;
             }
             disStats[sysName].sumLOS += days;
             
@@ -355,27 +385,24 @@
                 disStats[sysName].apacheCount++;
             }
 
-            // แยกข้อมูลรายเดือน
             monthsArray.forEach(m => {
                 let mStart = new Date(m.year, m.monthIndex, 1, 0, 0, 0);
-                let mEnd = new Date(m.year, m.monthIndex + 1, 0, 23, 59, 59);
+                let mEnd = new Date(m.year, m.monthIndex + 1, 0, 0, 0, 0); // วันสุดท้ายของเดือน
                 
+                let dIn = new Date(p.icu_in_date.split('T')[0]);
+                let dOut = p.discharge_date ? new Date(p.discharge_date.split('T')[0]) : new Date(2100, 0, 1);
+                dIn.setHours(0,0,0,0); dOut.setHours(0,0,0,0);
+
                 if (dIn <= mEnd && dOut >= mStart) {
                     monthStats[m.key].active++;
                     if (dIn >= mStart && dIn <= mEnd) monthStats[m.key].admits++;
                     
-                    if (p.discharge_date && p.status === 'เสียชีวิต') {
-                        let rOut = new Date(p.discharge_date.split('T')[0]);
-                        if (rOut >= mStart && rOut <= mEnd) monthStats[m.key].deaths++;
+                    if (p.discharge_date && p.status === 'เสียชีวิต' && dOut >= mStart && dOut <= mEnd) {
+                        monthStats[m.key].deaths++;
                     }
 
-                    let mOverStart = dIn > mStart ? dIn : mStart;
-                    let mOverEnd = dOut < mEnd ? dOut : mEnd;
-                    if (mOverStart <= mOverEnd) {
-                        let mDays = Math.ceil((mOverEnd - mOverStart) / 86400000);
-                        if (mDays === 0) mDays = 1;
-                        monthStats[m.key].sumLOS += mDays;
-                    }
+                    // ดึงฟังก์ชันนับวันแบบใหม่มาใช้
+                    monthStats[m.key].sumLOS += calcDaysStrict(p.icu_in_date, p.discharge_date, mStart, mEnd);
 
                     if (cStr.includes("VAP")) monthStats[m.key].vap++;
                     if (cStr.includes("CLABSI")) monthStats[m.key].clabsi++;
@@ -384,18 +411,19 @@
             });
         });
 
-        // อัปเดต KPI กล่องสีม่วง (ใช้ kpiSumLOS ที่ตัดเฉพาะเดือนแล้ว หารด้วยผู้ป่วย)
         document.getElementById('kpiTotal').innerText = total;
         document.getElementById('kpiMortality').innerText = total > 0 ? ((kpiDeaths / total) * 100).toFixed(1) : "0.0";
         document.getElementById('kpiMortalityText').innerText = `${kpiDeaths} จาก ${total} ราย`;
-        document.getElementById('kpiLOS').innerText = total > 0 ? (kpiSumLOS / total).toFixed(2) : "0.0";
+        
+        // แก้ไขให้ทศนิยมเป็น 2 ตำแหน่งให้ตรงกับในตาราง (6.14)
+        document.getElementById('kpiLOS').innerText = total > 0 ? (kpiSumLOS / total).toFixed(2) : "0.00";
+        
         document.getElementById('kpiCompCount').innerText = patientWithComp;
 
         const chartLabels = monthsArray.map(m => m.label);
         const admitData = monthsArray.map(m => monthStats[m.key].admits);
         const mortData = monthsArray.map(m => monthStats[m.key].active > 0 ? (monthStats[m.key].deaths / monthStats[m.key].active * 100).toFixed(1) : 0);
         const losData = monthsArray.map(m => monthStats[m.key].active > 0 ? (monthStats[m.key].sumLOS / monthStats[m.key].active).toFixed(1) : 0);
-        
         const vapData = monthsArray.map(m => monthStats[m.key].vap);
         const clabsiData = monthsArray.map(m => monthStats[m.key].clabsi);
         const extData = monthsArray.map(m => monthStats[m.key].extubate);
@@ -471,7 +499,6 @@
         });
     }
 
-    // แก้ไขปีในฟังก์ชันสร้างตารางสรุป 14 ข้อ ให้เป็นปีงบประมาณที่ถูกต้อง
     function renderYearlyTable(data) {
         const tbody = document.getElementById('yearlyStatsBody');
         tbody.innerHTML = '';
@@ -484,14 +511,12 @@
         ];
 
         let bedCount = 8;
-        
-        // ดึงปีที่ถูกกรองมาใช้ ถ้าช่องกรองว่างให้ใช้ปีปัจจุบัน
         let filterEnd = document.getElementById('filterEndMonth').value;
         let targetYearCE = new Date().getFullYear();
         if (filterEnd) {
             targetYearCE = parseInt(filterEnd.split('-')[0]);
             let filterMonth = parseInt(filterEnd.split('-')[1]);
-            // ถ้า Filter อยู่ในเดือน ต.ค.-ธ.ค. แปลว่าเป็นปีงบประมาณของปีถัดไป (เช่น ต.ค. 2026 = ปีงบ 2027)
+            // ถ้าเลือกเดือนต.ค. เป็นต้นไป ให้นับเป็นปีงบประมาณของปีถัดไป
             if (filterMonth >= 10) targetYearCE += 1;
         }
 
@@ -506,10 +531,9 @@
         fiscalMonths.forEach((fm, colIdx) => {
             let admitsNew = 0, admitsMove = 0, dcTotal = 0, dcMove = 0, dcHome = 0, dcRefer = 0, dcDeath = 0, sumLosMonth = 0, carryOver = 0;
             
-            // สำคัญ: การกำหนดปีสำหรับแต่ละเดือนในตาราง (ต.ค.-ธ.ค. ใช้ปีงบ - 1, ส่วน ม.ค.-ก.ย. ใช้ปีงบพอดี)
             let yCE = fm.m >= 9 ? targetYearCE - 1 : targetYearCE;
             let monthStart = new Date(yCE, fm.m, 1, 0, 0, 0);
-            let monthEnd = new Date(yCE, fm.m + 1, 0, 23, 59, 59);
+            let monthEnd = new Date(yCE, fm.m + 1, 0, 0, 0, 0);
 
             data.forEach(p => {
                 if(!p.icu_in_date) return;
@@ -532,14 +556,8 @@
                     else if (p.status === 'เสียชีวิต') dcDeath++;
                 }
 
-                let overlapStart = dIn > monthStart ? dIn : monthStart;
-                let overlapEnd = dOut < monthEnd ? dOut : monthEnd;
-                
-                if (overlapStart <= overlapEnd) {
-                    let diffTime = overlapEnd - overlapStart;
-                    let diffDays = Math.ceil(diffTime / 86400000); 
-                    sumLosMonth += (diffDays === 0 ? 1 : diffDays);
-                }
+                // ดึงฟังก์ชันนับวันแบบใหม่มาใช้ในตาราง
+                sumLosMonth += calcDaysStrict(p.icu_in_date, p.discharge_date, monthStart, monthEnd);
             });
 
             rowsData[1][colIdx] = carryOver;
