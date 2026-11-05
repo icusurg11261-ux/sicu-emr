@@ -307,42 +307,44 @@
     }
 
 // -------------------------------------------------------------
-    // ฟังก์ชันคำนวณวันนอน (LOS) แบบ "เข้านับ-ออกไม่นับ" ตรงตามระเบียบ สธ.
+    // ฟังก์ชันคำนวณวันนอน (LOS) ตรงตามสูตรคณิตศาสตร์ของ รพ. 100%
     // -------------------------------------------------------------
     function calcDaysStrict(startStr, endStr, filterStart, filterEnd) {
         if (!startStr) return 0;
+        
         let dIn = new Date(startStr.split('T')[0]);
         let dOut = endStr ? new Date(endStr.split('T')[0]) : new Date(2100, 0, 1);
         
-        // ตัดเวลาทิ้งให้เหลือแค่วันที่ (เวลาเที่ยงคืนตรง)
         dIn.setHours(0,0,0,0);
         dOut.setHours(0,0,0,0);
-        filterStart.setHours(0,0,0,0);
-        filterEnd.setHours(0,0,0,0);
-
-        if (dIn > filterEnd || dOut < filterStart) return 0; // ไม่เกี่ยวข้องกัน
-
-        let overlapStart = dIn > filterStart ? dIn : filterStart;
-        let overlapEnd = dOut < filterEnd ? dOut : filterEnd;
-
-        // หลักการ "เข้านับ ออกไม่นับ" (นับจำนวนคืนที่นอน)
-        let diffTime = overlapEnd - overlapStart;
-        let days = Math.floor(diffTime / 86400000); 
-
-        // กรณีเข้า-ออกวันเดียวกันในเดือนนั้นๆ (ยังไม่ข้ามคืน) ให้นับเป็น 1 วัน
-        if (days === 0 && dIn.getTime() === dOut.getTime() && dIn >= filterStart && dIn <= filterEnd) {
-            days = 1;
-        }
         
-        // หากวันที่ออกเป็นวันเดียวกันกับวันที่เริ่มเดือน หรือคนไข้นอนข้ามเดือนแล้วออกวันที่ 1
-        // และไม่ได้เพิ่งแอดมิทวันที่ 1 ให้นับเป็น 0 วันสำหรับเดือนนี้ (เพราะคิดของเดือนก่อนไปแล้ว)
-        if (days === 0 && overlapStart.getTime() === filterStart.getTime() && dIn < filterStart) {
-            days = 0; 
-        } else if (days === 0 && overlapStart < overlapEnd) {
-            days = 1;
+        let mStart = new Date(filterStart); mStart.setHours(0,0,0,0);
+        let mEnd = new Date(filterEnd); mEnd.setHours(0,0,0,0);
+
+        if (dIn > mEnd || dOut < mStart) return 0; // ไม่เกี่ยวข้องกัน
+
+        let days = 0;
+
+        // กรณีที่ 1: เข้าก่อนเดือนนี้ - ออกในเดือนนี้ (เช่น เข้า 25 ก.ย. ออก 5 ต.ค. -> วันนอน ต.ค. = 5)
+        if (dIn < mStart && dOut <= mEnd) {
+            days = dOut.getDate();
+        } 
+        // กรณีที่ 2: เข้าในเดือนนี้ - ออกในเดือนนี้ (เช่น เข้า 5 ออก 5 -> 1 วัน, เข้า 5 ออก 7 -> 2 วัน)
+        else if (dIn >= mStart && dOut <= mEnd) {
+            days = dOut.getDate() - dIn.getDate();
+            if (days === 0) days = 1;
+        }
+        // กรณีที่ 3: เข้าในเดือนนี้ - ยังไม่ออก หรือออกเดือนหน้า (เช่น เข้า 28 ต.ค. -> 31-28 = 3 วัน)
+        else if (dIn >= mStart && dOut > mEnd) {
+            days = mEnd.getDate() - dIn.getDate();
+            if (days === 0) days = 1; // เข้า 31 ต.ค. (31-31=0) ให้นับ 1
+        }
+        // กรณีที่ 4: เข้าก่อนเดือนนี้ - ยังไม่ออก หรือออกเดือนหน้า (อยู่เต็มเดือน)
+        else if (dIn < mStart && dOut > mEnd) {
+            days = mEnd.getDate();
         }
 
-        return days > 0 ? days : 0;
+        return days;
     }
 
     function updateDashboard(activePatients, monthsArray, filterStartDate, filterEndDate) {
