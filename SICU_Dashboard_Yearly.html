@@ -350,22 +350,28 @@
     function updateDashboard(activePatients, monthsArray, filterStartDate, filterEndDate) {
         let total = activePatients.length; 
         let kpiDeaths = 0;
+        let kpiDcTotal = 0; // เพิ่มตัวแปรเก็บยอดจำหน่ายทั้งหมดในช่วง Filter
         let kpiSumLOS = 0; 
         let patientWithComp = 0;
 
         let disStats = {}; 
         let monthStats = {};
-        monthsArray.forEach(m => { monthStats[m.key] = { active: 0, admits: 0, deaths: 0, sumLOS: 0, vap: 0, clabsi: 0, extubate: 0 }; });
+        // เพิ่ม dcTotal ลงไปใน monthStats ด้วย
+        monthsArray.forEach(m => { monthStats[m.key] = { active: 0, admits: 0, dcTotal: 0, deaths: 0, sumLOS: 0, vap: 0, clabsi: 0, extubate: 0 }; });
 
         activePatients.forEach(p => {
-            // นับวันนอนผ่านฟังก์ชันใหม่
             let days = calcDaysStrict(p.icu_in_date, p.discharge_date, filterStartDate, filterEndDate);
             kpiSumLOS += days;
 
-            if (p.discharge_date && p.status === 'เสียชีวิต') {
+            if (p.discharge_date) {
                 let realOut = new Date(p.discharge_date.split('T')[0]);
                 realOut.setHours(0,0,0,0);
-                if (realOut >= filterStartDate && realOut <= filterEndDate) kpiDeaths++;
+                if (realOut >= filterStartDate && realOut <= filterEndDate) {
+                    kpiDcTotal++; // นับเป็นยอดจำหน่าย (D/C) ในช่วงเวลาที่เลือก
+                    if (p.status === 'เสียชีวิต') {
+                        kpiDeaths++;
+                    }
+                }
             }
 
             let cStr = p.complication || "";
@@ -389,7 +395,7 @@
 
             monthsArray.forEach(m => {
                 let mStart = new Date(m.year, m.monthIndex, 1, 0, 0, 0);
-                let mEnd = new Date(m.year, m.monthIndex + 1, 0, 0, 0, 0); // วันสุดท้ายของเดือน
+                let mEnd = new Date(m.year, m.monthIndex + 1, 0, 0, 0, 0); 
                 
                 let dIn = new Date(p.icu_in_date.split('T')[0]);
                 let dOut = p.discharge_date ? new Date(p.discharge_date.split('T')[0]) : new Date(2100, 0, 1);
@@ -399,11 +405,13 @@
                     monthStats[m.key].active++;
                     if (dIn >= mStart && dIn <= mEnd) monthStats[m.key].admits++;
                     
-                    if (p.discharge_date && p.status === 'เสียชีวิต' && dOut >= mStart && dOut <= mEnd) {
-                        monthStats[m.key].deaths++;
+                    if (p.discharge_date && dOut >= mStart && dOut <= mEnd) {
+                        monthStats[m.key].dcTotal++; // นับยอด D/C รายเดือน
+                        if (p.status === 'เสียชีวิต') {
+                            monthStats[m.key].deaths++;
+                        }
                     }
 
-                    // ดึงฟังก์ชันนับวันแบบใหม่มาใช้
                     monthStats[m.key].sumLOS += calcDaysStrict(p.icu_in_date, p.discharge_date, mStart, mEnd);
 
                     if (cStr.includes("VAP")) monthStats[m.key].vap++;
@@ -414,17 +422,17 @@
         });
 
         document.getElementById('kpiTotal').innerText = total;
-        document.getElementById('kpiMortality').innerText = total > 0 ? ((kpiDeaths / total) * 100).toFixed(1) : "0.0";
-        document.getElementById('kpiMortalityText').innerText = `${kpiDeaths} จาก ${total} ราย`;
+        // แก้ไขกล่อง KPI อัตราตาย ให้หารด้วยยอด D/C ทั้งหมด (kpiDcTotal) แทนยอดรวม (total)
+        document.getElementById('kpiMortality').innerText = kpiDcTotal > 0 ? ((kpiDeaths / kpiDcTotal) * 100).toFixed(1) : "0.0";
+        document.getElementById('kpiMortalityText').innerText = `${kpiDeaths} จากจำหน่าย ${kpiDcTotal} ราย`;
         
-        // แก้ไขให้ทศนิยมเป็น 2 ตำแหน่งให้ตรงกับในตาราง (6.14)
         document.getElementById('kpiLOS').innerText = total > 0 ? (kpiSumLOS / total).toFixed(2) : "0.00";
-        
         document.getElementById('kpiCompCount').innerText = patientWithComp;
 
         const chartLabels = monthsArray.map(m => m.label);
         const admitData = monthsArray.map(m => monthStats[m.key].admits);
-        const mortData = monthsArray.map(m => monthStats[m.key].active > 0 ? (monthStats[m.key].deaths / monthStats[m.key].active * 100).toFixed(1) : 0);
+        // แก้ไขกราฟอัตราตายรายเดือน ให้หารด้วยยอด D/C รายเดือน (monthStats[m.key].dcTotal)
+        const mortData = monthsArray.map(m => monthStats[m.key].dcTotal > 0 ? (monthStats[m.key].deaths / monthStats[m.key].dcTotal * 100).toFixed(1) : 0);
         const losData = monthsArray.map(m => monthStats[m.key].active > 0 ? (monthStats[m.key].sumLOS / monthStats[m.key].active).toFixed(1) : 0);
         const vapData = monthsArray.map(m => monthStats[m.key].vap);
         const clabsiData = monthsArray.map(m => monthStats[m.key].clabsi);
@@ -518,7 +526,6 @@
         if (filterEnd) {
             targetYearCE = parseInt(filterEnd.split('-')[0]);
             let filterMonth = parseInt(filterEnd.split('-')[1]);
-            // ถ้าเลือกเดือนต.ค. เป็นต้นไป ให้นับเป็นปีงบประมาณของปีถัดไป
             if (filterMonth >= 10) targetYearCE += 1;
         }
 
@@ -558,7 +565,6 @@
                     else if (p.status === 'เสียชีวิต') dcDeath++;
                 }
 
-                // ดึงฟังก์ชันนับวันแบบใหม่มาใช้ในตาราง
                 sumLosMonth += calcDaysStrict(p.icu_in_date, p.discharge_date, monthStart, monthEnd);
             });
 
@@ -581,7 +587,9 @@
             rowsData[8][colIdx] = (sumLosMonth / daysInMonth).toFixed(2);
             rowsData[9][colIdx] = rowsData[5][colIdx] > 0 ? (sumLosMonth / rowsData[5][colIdx]).toFixed(2) : 0;
             rowsData[10][colIdx] = (dcTotal / bedCount).toFixed(2);
-            rowsData[11][colIdx] = rowsData[5][colIdx] > 0 ? ((dcDeath * 100) / rowsData[5][colIdx]).toFixed(2) : 0;
+            
+            // แก้ไขสูตรข้อ 11 (อัตราตายรายเดือน) ให้หารด้วยยอดจำหน่ายทั้งหมด (dcTotal)
+            rowsData[11][colIdx] = dcTotal > 0 ? ((dcDeath * 100) / dcTotal).toFixed(2) : 0;
         });
 
         let tableStructure = [
@@ -658,9 +666,10 @@
                 let totalDc = rowsData[4].reduce((a, b) => a + b, 0);
                 tdTotal.innerText = (totalDc / bedCount).toFixed(2);
             } else if (row.key === 11) { 
-                let totalPts = rowsData[5].reduce((a, b) => a + b, 0);
+                // แก้ไขสูตรข้อ 11 (อัตราตายรวม) ให้หารด้วย ยอดจำหน่ายทั้งหมด (Total D/C แถว 4) แทนยอดผู้ป่วยทั้งหมด
+                let totalDc = rowsData[4].reduce((a, b) => a + b, 0);
                 let totalDeath = rowsData["4_4"].reduce((a, b) => a + b, 0);
-                tdTotal.innerText = totalPts > 0 ? ((totalDeath * 100) / totalPts).toFixed(2) : 0;
+                tdTotal.innerText = totalDc > 0 ? ((totalDeath * 100) / totalDc).toFixed(2) : 0;
             } else if (row.type === "avg") {
                 tdTotal.innerText = countValidMonths > 0 ? (rowSum / countValidMonths).toFixed(2) : 0;
             } else {
