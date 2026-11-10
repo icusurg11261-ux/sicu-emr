@@ -1160,12 +1160,24 @@
     function addSurgeryRow(defaultDate = '', defaultDetail = '') {
         const container = document.getElementById('surgery-container');
         const uniqueId = Date.now() + Math.random().toString(36).substr(2, 5);
+        
+        // จุดสำคัญ: ต้องแทรก ${defaultDetail} ไว้ระหว่างเปิด-ปิดแท็ก <textarea>...</textarea>
         const html = `
-            <div class="row g-3 align-items-start mb-3 pb-3 border-bottom surg-entry" id="surg-row-${uniqueId}">
-                <div class="col-md-3"><label class="form-label text-primary">วันที่ผ่าตัด</label><input type="date" class="form-control surg-date" value="${defaultDate}"></div>
-                <div class="col-md-7"><label class="form-label text-primary">การผ่าตัดที่ได้รับ</label><textarea class="form-control surg-detail" id="surg-text-${uniqueId}" rows="2">${defaultDetail}</textarea></div>
-                <div class="col-md-2 text-end d-flex flex-column gap-2 mt-4"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="triggerScan('surg-text-${uniqueId}')">📷 สแกนภาพ</button><button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('surg-row-${uniqueId}').remove()">ลบ</button></div>
-            </div>`;
+        <div class="row g-3 align-items-start mb-3 pb-3 border-bottom surg-entry" id="surg-row-${uniqueId}">
+            <div class="col-md-3">
+                <label class="form-label text-primary">วันที่ผ่าตัด</label>
+                <input type="date" class="form-control surg-date" value="${defaultDate}">
+            </div>
+            <div class="col-md-7">
+                <label class="form-label text-primary">การผ่าตัดที่ได้รับ</label>
+                <textarea class="form-control surg-detail" id="surg-text-${uniqueId}" rows="2">${defaultDetail}</textarea>
+            </div>
+            <div class="col-md-2 text-end d-flex flex-column gap-2 mt-4">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="triggerScan('surg-text-${uniqueId}')">📷 สแกนภาพ</button>
+                <button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="document.getElementById('surg-row-${uniqueId}').remove()">ลบ</button>
+            </div>
+        </div>`;
+        
         container.insertAdjacentHTML('beforeend', html);
     }
 
