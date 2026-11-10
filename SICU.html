@@ -774,15 +774,20 @@
             if (otherMatch) document.getElementById('comp_other').value = otherMatch[1];
         }
 
-        // 6. ประวัติการผ่าตัด
-        document.getElementById('surgery-container').innerHTML = ''; 
-        if (data.surgery) {
-            data.surgery.split('\n').forEach(s => { 
-                const parts = s.split(' : '); 
-                addSurgeryRow(parts[0] || '', parts[1] || ''); 
-            });
-        } else { 
-            addSurgeryRow(); 
+        // 6. ประวัติการผ่าตัด (สำหรับปุ่มเพิ่มแถว)
+        const surgeryContainer = document.getElementById('surgery-container');
+        if (surgeryContainer) {
+            surgeryContainer.innerHTML = ''; // ล้างแถวเก่าทิ้งก่อน
+            if (data.surgery && data.surgery.trim() !== '') {
+                // แยกข้อมูลด้วยการขึ้นบรรทัดใหม่
+                data.surgery.split('\n').forEach(s => {
+                    const parts = s.split(' : ');
+                    // ส่งค่า Date และ Detail ไปยังฟังก์ชันสร้างแถว
+                    addSurgeryRow(parts[0] ? parts[0].trim() : '', parts[1] ? parts[1].trim() : '');
+                });
+            } else {
+                addSurgeryRow(); // ถ้าไม่มีประวัติ ให้สร้างแถวว่างๆ รอรับค่า
+            }
         }
         
         // 7. อุปกรณ์สายสวน
