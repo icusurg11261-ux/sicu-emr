@@ -760,9 +760,59 @@
         document.getElementById('dischargeStatus').value = (data.status === 'กำลังรักษา (In ICU)') ? '' : (data.status || '');
         document.getElementById('destinationDetail').value = data.destination || '';
         
-        // 4. คะแนน TRISS และ APACHE
+        // 4. คะแนน TRISS และ APACHE (พร้อมดึงค่าดิบที่เคยกรอกกลับคืนมา)
         if (data.triss_score) document.getElementById('outTRISS').innerText = data.triss_score; 
         if (data.apache_score) document.getElementById('outAPACHE').innerText = data.apache_score;
+
+        if (data.score_raw_data) {
+            try {
+                let raw = JSON.parse(data.score_raw_data);
+                
+                // คืนค่าหน้า TRISS
+                if (raw.triss) {
+                    document.getElementById('triss_type').value = raw.triss.type || 'blunt';
+                    document.getElementById('triss_e').value = raw.triss.e || '';
+                    document.getElementById('triss_v').value = raw.triss.v || '';
+                    document.getElementById('triss_m').value = raw.triss.m || '';
+                    document.getElementById('triss_sbp').value = raw.triss.sbp || '';
+                    document.getElementById('triss_rr').value = raw.triss.rr || '';
+                    document.getElementById('ais_head').value = raw.triss.ais_head || '0';
+                    document.getElementById('ais_face').value = raw.triss.ais_face || '0';
+                    document.getElementById('ais_chest').value = raw.triss.ais_chest || '0';
+                    document.getElementById('ais_abdomen').value = raw.triss.ais_abdomen || '0';
+                    document.getElementById('ais_ext').value = raw.triss.ais_ext || '0';
+                    document.getElementById('ais_external').value = raw.triss.ais_external || '0';
+                    calcTRISS(); // สั่งให้คำนวณรหัสสี GCS และยอดรวมใหม่ทันที
+                }
+                
+                // คืนค่าหน้า APACHE II
+                if (raw.apache) {
+                    document.getElementById('ap_chronic').value = raw.apache.chronic || '0';
+                    document.getElementById('ap_temp').value = raw.apache.temp || '';
+                    document.getElementById('ap_hr').value = raw.apache.hr || '';
+                    document.getElementById('ap_rr').value = raw.apache.rr || '';
+                    document.getElementById('ap_sbp').value = raw.apache.sbp || '';
+                    document.getElementById('ap_dbp').value = raw.apache.dbp || '';
+                    document.getElementById('ap_ph').value = raw.apache.ph || '';
+                    document.getElementById('ap_paco2').value = raw.apache.paco2 || '';
+                    document.getElementById('ap_pao2').value = raw.apache.pao2 || '';
+                    document.getElementById('ap_fio2').value = raw.apache.fio2 || '';
+                    document.getElementById('ap_e').value = raw.apache.e || '';
+                    document.getElementById('ap_v').value = raw.apache.v || '';
+                    document.getElementById('ap_m').value = raw.apache.m || '';
+                    document.getElementById('ap_hct').value = raw.apache.hct || '';
+                    document.getElementById('ap_wbc').value = raw.apache.wbc || '';
+                    document.getElementById('ap_na').value = raw.apache.na || '';
+                    document.getElementById('ap_k').value = raw.apache.k || '';
+                    document.getElementById('ap_hco3').value = raw.apache.hco3 || '';
+                    document.getElementById('ap_cr').value = raw.apache.cr || '';
+                    document.getElementById('ap_arf').checked = raw.apache.arf || false;
+                    calculateMAP(); // สั่งให้คำนวณ MAP, A-aDO2 และยอด APACHE รวมใหม่ทันที
+                }
+            } catch (err) {
+                console.error("ดึงข้อมูลดิบคะแนนผิดพลาด:", err);
+            }
+        }
 
         // 5. ภาวะแทรกซ้อน
         if (data.complication) {
@@ -774,19 +824,46 @@
             if (otherMatch) document.getElementById('comp_other').value = otherMatch[1];
         }
 
-        // 6. ประวัติการผ่าตัด (สำหรับปุ่มเพิ่มแถว)
+        // --- 6. ประวัติการผ่าตัด (ป้องกัน Error พังทั้งหน้า) ---
         const surgeryContainer = document.getElementById('surgery-container');
         if (surgeryContainer) {
-            surgeryContainer.innerHTML = ''; // ล้างแถวเก่าทิ้งก่อน
-            if (data.surgery && data.surgery.trim() !== '') {
-                // แยกข้อมูลด้วยการขึ้นบรรทัดใหม่
-                data.surgery.split('\n').forEach(s => {
-                    const parts = s.split(' : ');
-                    // ส่งค่า Date และ Detail ไปยังฟังก์ชันสร้างแถว
-                    addSurgeryRow(parts[0] ? parts[0].trim() : '', parts[1] ? parts[1].trim() : '');
-                });
-            } else {
-                addSurgeryRow(); // ถ้าไม่มีประวัติ ให้สร้างแถวว่างๆ รอรับค่า
+            surgeryContainer.innerHTML = '';
+            try {
+                if (data.surgery && data.surgery.trim() !== '') {
+                    // แยกรอบการผ่าตัดด้วยการขึ้นบรรทัดใหม่
+                    let surgLines = data.surgery.split('\n');
+                    let hasValidSurgery = false;
+
+                    surgLines.forEach(s => {
+                        if (s.trim() === '') return;
+                        
+                        // รองรับการเว้นวรรคหลายแบบ (เช่น ':', ' : ', ':-')
+                        let parts = s.includes(' : ') ? s.split(' : ') : s.split(':');
+                        
+                        let sDate = parts[0] ? parts[0].trim() : '';
+                        let sDetail = parts[1] ? parts[1].trim() : '';
+                        
+                        // ถ้าระบบหาเครื่องหมาย : ไม่เจอ ให้เหมาว่าทั้งหมดคือรายละเอียด (ไม่มีวันที่)
+                        if (!sDetail && sDate && !sDate.includes('-')) {
+                            sDetail = sDate;
+                            sDate = '';
+                        }
+                        
+                        if (sDate !== '' || sDetail !== '') {
+                            addSurgeryRow(sDate, sDetail);
+                            hasValidSurgery = true;
+                        }
+                    });
+
+                    // ถ้ากรองแล้วไม่มีอะไรเลย ให้เปิดแถวว่างๆ ไว้ 1 แถว
+                    if (!hasValidSurgery) addSurgeryRow();
+
+                } else {
+                    addSurgeryRow(); // ถ้าไม่มีประวัติเก่าเลย ให้เปิดแถวว่างๆ
+                }
+            } catch (error) {
+                console.error("ระบบเจอข้อมูลผ่าตัดรูปแบบผิดปกติ แต่ดัก Error ไว้แล้ว:", error);
+                addSurgeryRow(); 
             }
         }
         
@@ -808,35 +885,73 @@
             addDeviceRow('ett-container'); addDeviceRow('vent-container'); addDeviceRow('foley-container'); addDeviceRow('cline-container'); addDeviceRow('piv-container');
         }
 
-        // 8. แยกข้อมูลที่อยู่ลง 4 ช่องอย่างปลอดภัย (ครอบ try-catch กันค้าง)
-        try {
-            const addr = data.address || '';
-            const match = addr.match(/^(.*?)(?:\s+ต\.([^\s]+))?(?:\s+อ\.([^\s]+))?(?:\s+จ\.([^\s]+))?$/);
-            if (match && match[4]) {
-                document.getElementById('addr_detail').value = (match[1] || '').trim();
-                document.getElementById('addr_province').value = match[4];
+        // 8. แยกข้อมูลที่อยู่ลง 4 ช่องอย่างปลอดภัย (ฉบับปรับปรุงแก้บั๊ก Dropdown)
+    try {
+        const addr = data.address || '';
+        // แพทเทิร์นตัดคำที่ยืดหยุ่นขึ้น
+        const match = addr.match(/^(.*?)(?:\s+ต\.([^\s]+))?(?:\s+อ\.([^\s]+))?(?:\s+จ\.([^\s]+))?$/);
+        
+        if (match) {
+            // 1. หยอดบ้านเลขที่/หมู่ ลงช่องแรก
+            const detailEl = document.getElementById('addr_detail');
+            if (detailEl) detailEl.value = (match[1] || '').trim();
+            
+            const tambonText = match[2];
+            const amphoeText = match[3];
+            const provText = match[4];
+
+            if (provText) {
+                let provSel = document.getElementById('addr_province');
+                // ค้นหาและเลือกจังหวัดจาก "ข้อความ (Text)" แทนการใช้ Value
+                if (provSel) {
+                    for (let i = 0; i < provSel.options.length; i++) {
+                        if (provSel.options[i].text.includes(provText)) {
+                            provSel.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                
+                // สั่งให้ระบบโหลดอำเภอ
                 await updateAmphoe();
-                if (match[3]) {
-                    document.getElementById('addr_amphoe').value = match[3];
-                    updateTambon();
+                
+                if (amphoeText) {
+                    let ampSel = document.getElementById('addr_amphoe');
+                    if (ampSel) {
+                        for (let i = 0; i < ampSel.options.length; i++) {
+                            if (ampSel.options[i].text.includes(amphoeText)) {
+                                ampSel.selectedIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // สั่งให้ระบบโหลดตำบล
+                    if (typeof updateTambon === "function") {
+                        let isAsync = updateTambon.constructor.name === "AsyncFunction";
+                        isAsync ? await updateTambon() : updateTambon();
+                    }
+                    
+                    if (tambonText) {
+                        let tamSel = document.getElementById('addr_tambon');
+                        if (tamSel) {
+                            for (let i = 0; i < tamSel.options.length; i++) {
+                                if (tamSel.options[i].text.includes(tambonText)) {
+                                    tamSel.selectedIndex = i;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
-                if (match[2]) {
-                    document.getElementById('addr_tambon').value = match[2];
-                }
-                if ((match[3] && document.getElementById('addr_amphoe').value !== match[3]) ||
-                    (match[2] && document.getElementById('addr_tambon').value !== match[2])) {
-                    document.getElementById('addr_detail').value = addr;
-                    document.getElementById('addr_province').value = '';
-                    await updateAmphoe();
-                }
-            } else {
-                document.getElementById('addr_detail').value = addr;
-                document.getElementById('addr_province').value = '';
-                await updateAmphoe();
             }
-        } catch (err) {
-            console.error(err);
+        } else {
+            // ถ้าไม่ตรงแพทเทิร์นเลย ให้ใส่ช่องแรกทั้งหมด
+            if (document.getElementById('addr_detail')) document.getElementById('addr_detail').value = addr;
         }
+    } catch (err) {
+        console.error(err);
+        if (document.getElementById('addr_detail')) document.getElementById('addr_detail').value = data.address || '';
     }
 
     let currentTargetId = '';
@@ -1219,13 +1334,52 @@
         if (tambon) fullAddress += " ต." + tambon;
         if (amphoe) fullAddress += " อ." + amphoe;
         if (province) fullAddress += " จ." + province;
+        // รวบรวมข้อมูลที่กรอกในหน้า TRISS และ APACHE ทั้งหมด
+        let scoreRawData = {
+            triss: {
+                type: document.getElementById('triss_type').value,
+                e: document.getElementById('triss_e').value,
+                v: document.getElementById('triss_v').value,
+                m: document.getElementById('triss_m').value,
+                sbp: document.getElementById('triss_sbp').value,
+                rr: document.getElementById('triss_rr').value,
+                ais_head: document.getElementById('ais_head').value,
+                ais_face: document.getElementById('ais_face').value,
+                ais_chest: document.getElementById('ais_chest').value,
+                ais_abdomen: document.getElementById('ais_abdomen').value,
+                ais_ext: document.getElementById('ais_ext').value,
+                ais_external: document.getElementById('ais_external').value
+            },
+            apache: {
+                chronic: document.getElementById('ap_chronic').value,
+                temp: document.getElementById('ap_temp').value,
+                hr: document.getElementById('ap_hr').value,
+                rr: document.getElementById('ap_rr').value,
+                sbp: document.getElementById('ap_sbp').value,
+                dbp: document.getElementById('ap_dbp').value,
+                ph: document.getElementById('ap_ph').value,
+                paco2: document.getElementById('ap_paco2').value,
+                pao2: document.getElementById('ap_pao2').value,
+                fio2: document.getElementById('ap_fio2').value,
+                e: document.getElementById('ap_e').value,
+                v: document.getElementById('ap_v').value,
+                m: document.getElementById('ap_m').value,
+                hct: document.getElementById('ap_hct').value,
+                wbc: document.getElementById('ap_wbc').value,
+                na: document.getElementById('ap_na').value,
+                k: document.getElementById('ap_k').value,
+                hco3: document.getElementById('ap_hco3').value,
+                cr: document.getElementById('ap_cr').value,
+                arf: document.getElementById('ap_arf').checked
+            }
+        };
         const patientData = {
             hn: hn, prefix: document.getElementById('prefix').value, firstname: document.getElementById('firstName').value, lastname: document.getElementById('lastName').value,
             age: parseInt(document.getElementById('age').value) || null, address: fullAddress, icu_in_date: document.getElementById('icuInDate').value || null,
             adm_type: document.getElementById('admType').value, adm_from: document.getElementById('admFrom').value, disease_group: document.getElementById('diseaseGroup').value,
             primary_diagnosis: document.getElementById('primaryDiagnosis').value, has_sepsis: document.getElementById('hasSepsis').checked, sepsis_type: document.getElementById('sepsisType').value,
             sepsis_source: document.getElementById('sepsisSourceDetail').value, icu_reason: document.getElementById('icuReason').value, doctor_owner: document.getElementById('docOwner').value, doctor_support: document.getElementById('docSupport').value,
-            triss_score: document.getElementById('outTRISS').innerText, apache_score: document.getElementById('outAPACHE').innerText, surgery: surgeries.join('\n'), device_records: JSON.stringify(deviceRecords),
+            triss_score: document.getElementById('outTRISS').innerText, apache_score: document.getElementById('outAPACHE').innerText, score_raw_data: JSON.stringify(scoreRawData), surgery: surgeries.join('\n'), device_records: JSON.stringify(deviceRecords),
             complication: comps.join(', '), 
             status: dStatus ? dStatus : 'กำลังรักษา (In ICU)', discharge_date: document.getElementById('icuOutDate').value || null, destination: document.getElementById('destinationDetail').value
         };
@@ -1317,15 +1471,12 @@ function calculateMAP() {
         mapField.value = "";
     }
 }
-// ฟังก์ชันตรวจสอบผู้ป่วยรับซ้ำ (Readmission) อัตโนมัติเมื่อพิมพ์ HN
+// ฟังก์ชันตรวจสอบผู้ป่วยรับซ้ำ (Readmission) ดึงข้อมูลครบทุกฟิลด์
 async function checkReadmission(inputHn) {
-    // ทำงานเฉพาะตอนกด "+ รับผู้ป่วยใหม่" เท่านั้น (ถ้าคลิกเข้ามาแก้ไขข้อมูลเดิมจะไม่ทำงานซ้ำ)
     if (editHN || !inputHn) return;
 
-    // ตัดเลขรอบท้าย HN ออกก่อน (เผื่อผู้ใช้พิมพ์ติดมา) เพื่อหา HN ต้นฉบับ
     const baseHn = inputHn.trim().split('-')[0];
 
-    // ค้นหาในฐานข้อมูลว่ามี HN นี้หรือยัง
     const { data, error } = await supabaseClient
         .from('patients')
         .select('*')
@@ -1334,30 +1485,30 @@ async function checkReadmission(inputHn) {
     if (data && data.length > 0) {
         const nextRound = data.length + 1;
         const newHnCode = `${baseHn}-${nextRound}`;
-        const lastRecord = data[data.length - 1];
+        const lastRecord = data[data.length - 1]; // ดึงข้อมูลรอบล่าสุด
 
         const confirmReadmit = confirm(
             `⚠️ พบประวัติผู้ป่วย HN: ${baseHn} (${lastRecord.prefix || ''}${lastRecord.firstname || ''} ${lastRecord.lastname || ''}) ในระบบแล้วจำนวน ${data.length} ครั้ง\n\n` +
-            `• กด "ตกลง (OK)" เพื่อเปิดใบรับใหม่รอบที่ ${nextRound} (รหัส ${newHnCode}) โดยดึงชื่อและที่อยู่เดิมมาให้อัตโนมัติ\n` +
-            `• กด "ยกเลิก (Cancel)" เพื่อเข้าไปแก้ไขข้อมูลการนอนรักษาครั้งล่าสุดแทน`
+            `• กด "ตกลง (OK)" เพื่อสร้างรอบที่ ${nextRound} (ระบบจะก๊อปปี้ข้อมูลเก่ามาให้ทั้งหมด)\n` +
+            `• กด "ยกเลิก (Cancel)" เพื่อกลับไปแก้ไขข้อมูลการนอนรักษาครั้งล่าสุดแทน`
         );
 
         if (confirmReadmit) {
-            // ตั้งรหัส HN ใหม่เป็น รอบที่ 2, 3, ... เพื่อไม่ให้เซฟทับรอบเก่า
-            document.getElementById('hn').value = newHnCode;
-
-            // ดึงเฉพาะข้อมูลพื้นฐาน (ชื่อ-สกุล-อายุ-ที่อยู่) มาใส่ให้ ไม่ต้องพิมพ์ใหม่
-            document.getElementById('prefix').value = lastRecord.prefix || 'นาย';
-            document.getElementById('firstName').value = lastRecord.firstname || '';
-            document.getElementById('lastName').value = lastRecord.lastname || '';
-            document.getElementById('age').value = lastRecord.age || '';
-
-            // ดึงที่อยู่เดิมมาใส่ช่องบ้านเลขที่/รายละเอียด
-            document.getElementById('addr_detail').value = lastRecord.address || '';
-            document.getElementById('addr_province').value = '';
-            await updateAmphoe();
+            // 1. สั่งให้ระบบทำตัวเสมือนว่ากำลังเปิดแก้ไขประวัติเก่า (ดึงครบทุกช่อง)
+            await loadPatientData(lastRecord.hn);
+            
+            // 2. แต่พอโหลดเสร็จปุ๊บ ให้แอบเปลี่ยนรหัส HN เป็นของรอบใหม่ (HN-2)
+            setTimeout(() => {
+                document.getElementById('hn').value = newHnCode;
+                // ล้างวันที่รับเข้า และวันที่จำหน่ายของรอบเก่าทิ้ง เพื่อบังคับให้พยาบาลลงวันที่ของรอบใหม่
+                document.getElementById('icuInDate').value = '';
+                document.getElementById('icuOutDate').value = '';
+                document.getElementById('dischargeStatus').value = '';
+                document.getElementById('destinationDetail').value = '';
+            }, 500); // หน่วงเวลาเล็กน้อยเพื่อให้หน้าจอโหลดข้อมูลเสร็จก่อน
+            
         } else {
-            // ถ้าต้องการแก้ข้อมูลรอบเดิม ให้พาไปหน้าแก้ไขของรอบล่าสุดทันที
+            // ถ้ากดยกเลิก จะเด้งไปหน้าแก้ไขรอบล่าสุด
             window.location.href = `SICU.html?hn=${encodeURIComponent(lastRecord.hn)}`;
         }
     }

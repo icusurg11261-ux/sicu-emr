@@ -10,8 +10,10 @@
     <style>
         :root { --sicu-primary: #0d6efd; --sicu-dark: #0a58ca; }
         body { background-color: #f4f7f6; font-family: sans-serif; padding-bottom: 50px; }
-        .page-header { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+        .page-header { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
         .filter-box { display: flex; gap: 15px; align-items: center; background: #f8f9fa; padding: 10px 20px; border-radius: 8px; border: 1px solid #dee2e6; flex-wrap: wrap; }
+        .summary-bar { background: white; border-radius: 12px; padding: 12px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #dee2e6; border-left: 5px solid #0d6efd; margin-bottom: 15px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; font-size: 0.85rem; }
+        .summary-chip { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 6px; }
         .table-wrapper { background: white; border-radius: 12px; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid #dee2e6; }
         .table { margin-bottom: 0; font-size: 0.85rem; }
         .table thead th { background-color: #0d6efd !important; color: white !important; text-align: center !important; font-weight: 600; padding: 15px 8px; vertical-align: middle; border-bottom: none; font-size: 0.8rem; border-right: 1px solid rgba(255,255,255,0.2); }
@@ -19,6 +21,7 @@
         .table tbody tr:hover { background-color: #f8f9fa; }
         .info-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 6px; margin-bottom: 6px; font-size: 0.75rem; }
         .badge-sepsis { background-color: #dc3545; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; display: inline-block; margin-bottom: 5px; }
+        .badge-carryover { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; display: inline-block; margin-bottom: 4px; }
         .badge-status-active { background-color: #ffc107; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
         .badge-status-move { background-color: #198754; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
         .text-primary-custom { color: #0d6efd; font-weight: bold; }
@@ -56,10 +59,15 @@
             <div class="d-flex align-items-center gap-2 border-end pe-3">
                 <label class="text-secondary mb-0" style="white-space: nowrap;">กลุ่มโรค:</label>
                 <select class="form-select form-select-sm" id="filterDisease" onchange="applyFilters()">
-                    <option value="">-- ทุกกลุ่มโรค (นับยอดยกมา) --</option>
-                    <option>Multiple injury (MI)</option><option>Head injury (HI)</option><option>Haemorrhagic stroke (CVD)</option>
-                    <option>Brain tumor</option><option>Blunt abdomen injury</option><option>Chest injury</option>
-                    <option>ORTHO</option><option>GEN</option>
+                    <option value="">-- ทุกกลุ่มโรค (รวมยอดยกมา) --</option>
+                    <option>Multiple injury (MI)</option>
+                    <option>Head injury (HI)</option>
+                    <option>Haemorrhagic stroke (CVD)</option>
+                    <option>Brain tumor</option>
+                    <option>Blunt abdomen injury</option>
+                    <option>Chest injury</option>
+                    <option>ORTHO</option>
+                    <option>GEN</option>
                 </select>
             </div>
             <div class="d-flex align-items-center gap-2">
@@ -72,11 +80,33 @@
         </div>
     </div>
 
+    <!-- Summary Bar (สรุปยอดยกมา / รับใหม่ / วันนอนเฉพาะช่วงเวลาที่ค้น) -->
+    <div class="summary-bar" id="summaryBar">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="summary-chip">
+                <span class="text-secondary">ผู้ป่วยทั้งหมด:</span>
+                <strong class="text-primary fs-6" id="sumTotalPatients">0</strong> ราย
+                <span class="text-muted small">(<span class="text-warning-emphasis fw-bold">ยอดยกมา <span id="sumCarryOver">0</span></span> + <span class="text-success fw-bold">รับใหม่ <span id="sumNewAdmit">0</span></span>)</span>
+            </div>
+            <div class="summary-chip" style="background: #fff5f5; border-color: #f5c2c7;">
+                <span class="text-secondary" id="sumLosLabel">วันนอนรวม (เฉพาะช่วงที่ค้น):</span>
+                <strong class="text-danger fs-6" id="sumLosFiltered">0</strong> วัน
+            </div>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2 small text-secondary" id="sumDevicesBox">
+            <span>อุปกรณ์ในช่วงที่ค้น:</span>
+            <span class="badge bg-light text-dark border">ETT: <strong id="sumEtt">0</strong></span>
+            <span class="badge bg-light text-dark border">Vent: <strong id="sumVent">0</strong></span>
+            <span class="badge bg-light text-dark border">Cath: <strong id="sumCath">0</strong></span>
+            <span class="badge bg-light text-dark border">IV: <strong id="sumIv">0</strong></span>
+            <span class="badge bg-light text-dark border">C-Line: <strong id="sumCline">0</strong></span>
+        </div>
+    </div>
+
     <!-- Data Table -->
     <div class="table-wrapper">
         <div class="table-responsive">
             <style>
-                /* บังคับให้ตัวอักษรทุกช่องในตารางมีขนาดและระยะบรรทัดเท่ากันทั้งหมด */
                 #logbookTable tbody td,
                 #logbookTable tbody td small,
                 #logbookTable tbody td .info-box,
@@ -84,13 +114,11 @@
                     font-size: 0.75rem !important;
                     line-height: 1.3 !important;
                 }
-                /* ลดขนาดตัวอักษรและระยะบรรทัดเฉพาะช่องที่อยู่ (คอลัมน์สุดท้าย) */
                 #logbookTable tbody td:last-child,
                 #logbookTable tbody td:last-child small {
                     font-size: 0.72rem !important;
                     line-height: 1.3 !important;
                 }
-                /* ขนาดตัวอักษรหัวตาราง */
                 #logbookTable thead th {
                     font-size: 0.84rem !important;
                 }
@@ -111,7 +139,7 @@
                     </tr>
                 </thead>
                 <tbody id="tableBody">
-                    <tr><td colspan="11" class="text-center text-secondary py-4">กำลังโหลดข้อมูลจากฐานข้อมูล...</td></tr>
+                    <tr><td colspan="10" class="text-center text-secondary py-4">กำลังโหลดข้อมูลจากฐานข้อมูล...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -122,7 +150,8 @@
     const supabaseUrl = 'https://aakyylpfusmwlsvksaim.supabase.co';
     const supabaseKey = 'sb_publishable_LjzvHRqLIDSE8OQhEHJPVw_Lb5XL9T8';
     const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
-    let allPatients = []; 
+    let allPatients = [];
+    let currentExportRows = [];
 
     document.addEventListener("DOMContentLoaded", () => {
         const now = new Date();
@@ -155,9 +184,26 @@
     checkAuth();
     async function signOut() { await supabaseClient.auth.signOut(); window.location.href = 'index.html'; }
 
+    // เติมกลุ่มโรคที่มีในฐานข้อมูลแต่ยังไม่มีใน Dropdown ให้อัตโนมัติ (เช่น TRAUMA, Penetrating)
+    function syncDiseaseDropdown(patients) {
+        const select = document.getElementById('filterDisease');
+        const existing = new Set(Array.from(select.options).map(o => o.value.trim().toLowerCase()));
+        patients.forEach(p => {
+            const g = (p.disease_group || '').trim();
+            if (g && !existing.has(g.toLowerCase())) {
+                select.options.add(new Option(g, g));
+                existing.add(g.toLowerCase());
+            }
+        });
+    }
+
     async function fetchPatients() {
         const { data, error } = await supabaseClient.from('patients').select('*').order('icu_in_date', { ascending: true });
-        if (!error) { allPatients = data; applyFilters(); }
+        if (!error) {
+            allPatients = data || [];
+            syncDiseaseDropdown(allPatients);
+            applyFilters();
+        }
     }
 
     async function deletePatient(hn) {
@@ -166,6 +212,14 @@
             if (error) { alert('❌ เกิดข้อผิดพลาดในการลบ: ' + error.message); } 
             else { alert('✅ ลบข้อมูลสำเร็จ'); fetchPatients(); }
         }
+    }
+
+    // แปลงวันที่แบบ Local Date ป้องกันปัญหา Timezone ข้ามวัน
+    function parseLocalDate(dateStr) {
+        if (!dateStr) return null;
+        const parts = String(dateStr).split('T')[0].split('-');
+        if (parts.length !== 3) return new Date(dateStr);
+        return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
     }
 
     function formatDateThai(dateStr) {
@@ -188,7 +242,7 @@
         let filtered = 0;
 
         let startMonthVal = fStart ? (fStart.getFullYear() * 12 + fStart.getMonth()) : 0;
-        let endMonthVal = fEnd ? (fEnd.getFullYear() * 12 + fEnd.getMonth()) : 0;
+        let endMonthVal = fEnd ? (fEnd.getFullYear() * 12 + fEnd.getMonth()) : 999999;
 
         if (Y1 === Y2 && M1 === M2) {
             let days = D2 - D1;
@@ -242,8 +296,8 @@
 
     function calculateDaysWithFilter(startStr, endStr, fStart, fEnd, hasDateFilter) {
         if (!startStr) return { total: 0, filtered: 0 };
-        let dStart = new Date(startStr.split('T')[0]);
-        let dEnd = endStr ? new Date(endStr.split('T')[0]) : new Date(); 
+        let dStart = parseLocalDate(startStr);
+        let dEnd = endStr ? parseLocalDate(endStr) : new Date(); 
         dStart.setHours(0,0,0,0);
         dEnd.setHours(0,0,0,0);
         if (dStart > dEnd) return { total: 0, filtered: 0 };
@@ -252,10 +306,10 @@
 
     function calculateDeviceDaysWithFilter(devOnStr, devOffStr, pInStr, pOutStr, fStart, fEnd, hasDateFilter) {
         if (!devOnStr || !pInStr) return { total: 0, filtered: 0 };
-        let dOn = new Date(devOnStr.split('T')[0]);
-        let dOff = devOffStr ? new Date(devOffStr.split('T')[0]) : null;
-        let pIn = new Date(pInStr.split('T')[0]);
-        let pOut = pOutStr ? new Date(pOutStr.split('T')[0]) : new Date();
+        let dOn = parseLocalDate(devOnStr);
+        let dOff = devOffStr ? parseLocalDate(devOffStr) : null;
+        let pIn = parseLocalDate(pInStr);
+        let pOut = pOutStr ? parseLocalDate(pOutStr) : new Date();
         
         let start = dOn > pIn ? dOn : pIn; 
         let end = dOff ? (dOff < pOut ? dOff : pOut) : pOut;
@@ -269,7 +323,7 @@
     function applyFilters() {
         const startVal = document.getElementById('filterMonthStart').value;
         const endVal = document.getElementById('filterMonthEnd').value;
-        const diseaseFilter = document.getElementById('filterDisease').value;
+        const diseaseFilter = document.getElementById('filterDisease').value.trim();
         const sepsisFilter = document.getElementById('filterSepsis').value;
 
         let fStart = null;
@@ -278,41 +332,49 @@
 
         if (startVal) { 
             const [sy, sm] = startVal.split('-'); 
-            fStart = new Date(sy, sm - 1, 1); 
+            fStart = new Date(parseInt(sy, 10), parseInt(sm, 10) - 1, 1); 
             fStart.setHours(0,0,0,0);
             hasDateFilter = true; 
         }
         if (endVal) { 
             const [ey, em] = endVal.split('-'); 
-            fEnd = new Date(ey, em, 0); 
+            fEnd = new Date(parseInt(ey, 10), parseInt(em, 10), 0); 
             fEnd.setHours(23,59,59,999);
             hasDateFilter = true; 
         }
 
+        const effectiveStart = fStart || new Date(1900, 0, 1);
+        const effectiveEnd = fEnd || new Date(2100, 0, 1);
+
         let filteredData = allPatients.filter(p => {
             let matchTime = true, matchDisease = true, matchSepsis = true;
 
+            // 1. กรองช่วงเวลาแบบนับรวมยอดยกมาเสมอ (ไม่ว่าจะเลือกทุกกลุ่มโรค หรือแยกกลุ่มโรค)
             if (hasDateFilter) {
-                if (!p.icu_in_date) { matchTime = false; } 
-                else {
-                    const inD = new Date(p.icu_in_date);
-                    const outD = p.discharge_date ? new Date(p.discharge_date) : new Date(2100, 0, 1);
-
-                    if (diseaseFilter === "") {
-                        matchTime = (inD <= fEnd) && (outD >= fStart);
-                    } else {
-                        matchTime = (inD >= fStart) && (inD <= fEnd);
-                    }
+                if (!p.icu_in_date) {
+                    matchTime = false;
+                } else {
+                    const inD = parseLocalDate(p.icu_in_date);
+                    const outD = p.discharge_date ? parseLocalDate(p.discharge_date) : new Date(2100, 0, 1);
+                    matchTime = (inD <= effectiveEnd) && (outD >= effectiveStart);
                 }
             }
 
-            if (diseaseFilter) matchDisease = p.disease_group === diseaseFilter;
-            if (sepsisFilter === "true") matchSepsis = p.has_sepsis === true;
+            // 2. กรองกลุ่มโรคแบบตัดช่องว่างแฝง
+            if (diseaseFilter) {
+                matchDisease = (p.disease_group || '').trim().toLowerCase() === diseaseFilter.toLowerCase();
+            }
+
+            // 3. กรอง Sepsis
+            if (sepsisFilter === "true") {
+                matchSepsis = p.has_sepsis === true;
+            }
 
             return matchTime && matchDisease && matchSepsis;
         });
 
-        renderTable(filteredData, fStart, fEnd, hasDateFilter);
+        const isSingleMonth = Boolean(startVal && endVal && startVal === endVal);
+        renderTable(filteredData, fStart, fEnd, hasDateFilter, isSingleMonth);
     }
 
     function editPatient(hn) { 
@@ -325,13 +387,31 @@
         return `<span class="text-danger fw-bold">${fil}</span> <small class="text-muted">(รวม ${tot})</small>`;
     };
 
-    function renderTable(data, fStart, fEnd, hasDateFilter) {
+    function renderTable(data, fStart, fEnd, hasDateFilter, isSingleMonth) {
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
-        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="11" class="text-center text-secondary py-4">ไม่พบข้อมูลผู้ป่วยตามเงื่อนไขที่เลือก</td></tr>'; return; }
+        currentExportRows = [];
+
+        const periodText = isSingleMonth ? 'เฉพาะเดือนนี้' : 'เฉพาะช่วงที่ค้น';
+        document.getElementById('sumLosLabel').innerText = `วันนอนรวม (${periodText}):`;
+
+        let carryOverCount = 0;
+        let sumLosFiltered = 0;
+        let sumEtt = 0, sumVent = 0, sumCath = 0, sumIv = 0, sumCline = 0;
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-secondary py-4">ไม่พบข้อมูลผู้ป่วยตามเงื่อนไขที่เลือก</td></tr>';
+            updateSummaryBar(0, 0, 0, 0, 0, 0, 0, 0);
+            return;
+        }
 
         data.forEach((p, index) => {
+            const inD = parseLocalDate(p.icu_in_date);
+            const isCarryOver = Boolean(hasDateFilter && fStart && inD && inD < fStart);
+            if (isCarryOver) carryOverCount++;
+
             const losData = calculateDaysWithFilter(p.icu_in_date, p.discharge_date, fStart, fEnd, hasDateFilter);
+            sumLosFiltered += losData.filtered;
             
             let ettTotal = 0, ettFiltered = 0;
             let ventTotal = 0, ventFiltered = 0;
@@ -350,12 +430,21 @@
                 } catch(e){}
             }
 
+            sumEtt += ettFiltered;
+            sumVent += ventFiltered;
+            sumCath += foleyFiltered;
+            sumIv += pivFiltered;
+            sumCline += clineFiltered;
+
+            const carryOverBadge = isCarryOver ? `<span class="badge-carryover">📌 ยอดยกมา</span><br>` : '';
+
             const dateInfo = `
+                ${carryOverBadge}
                 เข้า: <span class="text-success">${formatDateThai(p.icu_in_date)}</span><br>
                 ออก: <span>${formatDateThai(p.discharge_date)}</span><br>
                 <div class="mt-1">
                     <span class="text-primary-custom d-inline-block">LOS รวม: ${losData.total} วัน</span>
-                    ${(hasDateFilter && losData.total !== losData.filtered) ? `<br><span class="text-danger fw-bold" style="font-size:0.75rem;">(เฉพาะเดือนนี้: ${losData.filtered} วัน)</span>` : ''}
+                    ${(hasDateFilter && losData.total !== losData.filtered) ? `<br><span class="text-danger fw-bold" style="font-size:0.75rem;">(${periodText}: ${losData.filtered} วัน)</span>` : ''}
                 </div>
             `;
 
@@ -386,14 +475,14 @@
             `;
 
             const deviceInfo = `
-            <span class="text-secondary" style="line-height:1.6;">
-            ETT: ${formatDeviceText(ettTotal, ettFiltered, hasDateFilter)}<br>
-            Ven: ${formatDeviceText(ventTotal, ventFiltered, hasDateFilter)}<br>
-            Cath: ${formatDeviceText(foleyTotal, foleyFiltered, hasDateFilter)}<br>
-            IV: ${formatDeviceText(pivTotal, pivFiltered, hasDateFilter)}<br>
-            C-Line: ${formatDeviceText(clineTotal, clineFiltered, hasDateFilter)}
-            </span>
-        `;
+                <span class="text-secondary" style="line-height:1.6;">
+                ETT: ${formatDeviceText(ettTotal, ettFiltered, hasDateFilter)}<br>
+                Ven: ${formatDeviceText(ventTotal, ventFiltered, hasDateFilter)}<br>
+                Cath: ${formatDeviceText(foleyTotal, foleyFiltered, hasDateFilter)}<br>
+                IV: ${formatDeviceText(pivTotal, pivFiltered, hasDateFilter)}<br>
+                C-Line: ${formatDeviceText(clineTotal, clineFiltered, hasDateFilter)}
+                </span>
+            `;
 
             let surgeryDisplay = '-';
             if (p.surgery) {
@@ -404,26 +493,79 @@
                 }).join('<br>');
             }
 
+            // เก็บข้อมูลสำหรับ Export Excel ตามช่วงเวลาและกลุ่มโรคที่กรอง
+            currentExportRows.push({
+                'ลำดับ': index + 1,
+                'สถานะในงวด': isCarryOver ? 'ยอดยกมา' : 'รับใหม่ในงวด',
+                'HN': p.hn || '',
+                'ชื่อ-สกุล': `${p.prefix || ''}${p.firstname || ''} ${p.lastname || ''}`.trim(),
+                'อายุ': p.age || '',
+                'กลุ่มโรค': p.disease_group || '',
+                'Sepsis': p.has_sepsis ? (p.sepsis_type || 'มีภาวะ') : 'ไม่มี',
+                'เข้า ICU': formatDateThai(p.icu_in_date),
+                'ออก ICU': formatDateThai(p.discharge_date),
+                'LOS รวม (วัน)': losData.total,
+                [`LOS ${periodText} (วัน)`]: losData.filtered,
+                'ETT (ช่วงที่ค้น)': ettFiltered,
+                'Vent (ช่วงที่ค้น)': ventFiltered,
+                'Cath (ช่วงที่ค้น)': foleyFiltered,
+                'IV (ช่วงที่ค้น)': pivFiltered,
+                'C-Line (ช่วงที่ค้น)': clineFiltered,
+                'ประเภทรับเข้า': p.adm_type || '',
+                'รับจาก': p.adm_from || '',
+                'สถานะจำหน่าย': p.status || '',
+                'ย้ายไป': p.destination || '',
+                'APACHE II': p.apache_score || '',
+                'TRISS': p.triss_score || '',
+                'การวินิจฉัยโรค': p.primary_diagnosis || '',
+                'การผ่าตัด': p.surgery || '',
+                'แพทย์': p.doctor_owner || '',
+                'ที่อยู่': p.address || ''
+            });
+
             const row = `<tr>
-            <td class="text-center align-top">
-                <div class="fw-bold mb-1">${index + 1}</div>
-                <button class="btn btn-sm btn-outline-danger px-1 py-0" style="font-size: 0.75rem;" onclick="deletePatient('${p.hn}')" title="ลบข้อมูล">🗑️</button>
-            </td>
-            <td>${patientInfo}</td>
-            <td>${clinicalInfo}</td>
-            <td>${dateInfo}</td>
-            <td>${moveInfo}</td>
-            <td>${deviceInfo}</td>
-            <td style="font-size: 0.82rem;">${p.primary_diagnosis || '-'}</td>
-            <td style="font-size: 0.82rem; line-height: 1.4;">${surgeryDisplay}</td>
-            <td><span class="fw-bold">${p.doctor_owner || '-'}</span><br><small class="text-muted">${p.doctor_support || ''}</small></td>
-            <td><small class="text-muted">${p.address || '-'}</small></td>
-        </tr>`;
-        tbody.insertAdjacentHTML('beforeend', row);
+                <td class="text-center align-top">
+                    <div class="fw-bold mb-1">${index + 1}</div>
+                    <button class="btn btn-sm btn-outline-danger px-1 py-0" style="font-size: 0.75rem;" onclick="deletePatient('${p.hn}')" title="ลบข้อมูล">🗑️</button>
+                </td>
+                <td>${patientInfo}</td>
+                <td>${clinicalInfo}</td>
+                <td>${dateInfo}</td>
+                <td>${moveInfo}</td>
+                <td>${deviceInfo}</td>
+                <td style="font-size: 0.82rem;">${p.primary_diagnosis || '-'}</td>
+                <td style="font-size: 0.82rem; line-height: 1.4;">${surgeryDisplay}</td>
+                <td><span class="fw-bold">${p.doctor_owner || '-'}</span><br><small class="text-muted">${p.doctor_support || ''}</small></td>
+                <td><small class="text-muted">${p.address || '-'}</small></td>
+            </tr>`;
+            tbody.insertAdjacentHTML('beforeend', row);
         });
+
+        updateSummaryBar(data.length, carryOverCount, sumLosFiltered, sumEtt, sumVent, sumCath, sumIv, sumCline);
     }
 
-    function exportExcel() { const ws = XLSX.utils.json_to_sheet(allPatients); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "PatientLogbook"); XLSX.writeFile(wb, "SICU_Logbook_Export.xlsx"); }
+    function updateSummaryBar(total, carryOver, losFiltered, ett, vent, cath, iv, cline) {
+        document.getElementById('sumTotalPatients').innerText = total.toLocaleString();
+        document.getElementById('sumCarryOver').innerText = carryOver.toLocaleString();
+        document.getElementById('sumNewAdmit').innerText = (total - carryOver).toLocaleString();
+        document.getElementById('sumLosFiltered').innerText = losFiltered.toLocaleString();
+        document.getElementById('sumEtt').innerText = ett.toLocaleString();
+        document.getElementById('sumVent').innerText = vent.toLocaleString();
+        document.getElementById('sumCath').innerText = cath.toLocaleString();
+        document.getElementById('sumIv').innerText = iv.toLocaleString();
+        document.getElementById('sumCline').innerText = cline.toLocaleString();
+    }
+
+    function exportExcel() {
+        const exportData = currentExportRows.length > 0 ? currentExportRows : allPatients;
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "PatientLogbook");
+        const startVal = document.getElementById('filterMonthStart').value || 'ALL';
+        const endVal = document.getElementById('filterMonthEnd').value || 'ALL';
+        const diseaseVal = document.getElementById('filterDisease').value || 'AllDisease';
+        XLSX.writeFile(wb, `SICU_Logbook_${diseaseVal}_${startVal}_to_${endVal}.xlsx`);
+    }
 </script>
 </body>
 </html>
