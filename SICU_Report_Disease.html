@@ -197,12 +197,28 @@
             dg.includes('chest injury') ||
             dg.includes('trauma') ||
             dg.includes('penetrat') ||
-            /multiple injury|polytrauma|blunt|penetrat|penentrat|stab|gunshot|gsw|burn|scald|drown|hanging|ถูกยิง|ถูกแทง|แขวนคอ|ไฟไหม้|น้ำร้อนลวก|จมน้ำ/.test(dx)
+            dg.includes('ถูกยิง') ||
+            dg.includes('ถูกแทง') ||
+            dg.includes('แขวนคอ') ||
+            dg.includes('ผูกคอ') ||
+            /multiple injury|polytrauma|blunt|penetrat|penentrat|stab|gunshot|gsw|burn|scald|drown|hanging|ถูกยิง|ถูกแทง|แขวนคอ|ผูกคอ|ไฟไหม้|น้ำร้อนลวก|จมน้ำ/.test(dx)
         );
 
         if (isTraumaGroup) {
-            // คัดแยกเข้า 14 แถวของ TRAUMA
-            if (dg.includes('multiple injury') || /multiple injury|polytrauma|thoracoabdom|thoroco-abdom/.test(dx)) {
+            // 1.1 ถ้าช่องกลุ่มโรคหลักระบุ ถูกยิง/ถูกแทง/Penetrating/แขวนคอ/ผูกคอ ให้ลงข้อ 13 ทันที
+            if (/penetrat|penentrat|stab|gunshot|gsw|ถูกยิง|ถูกแทง|แขวนคอ|ผูกคอ/.test(dg)) {
+                return { group: 'TRAUMA', key: 't13', name: 'อื่นๆ (ถูกยิง,ถูกแทง,แขวนคอ)' };
+            }
+            // 1.2 ถ้าช่องกลุ่มโรคหลักระบุ Multiple injury ชัดเจน ให้ลงข้อ 11
+            if (dg.includes('multiple injury')) {
+                return { group: 'TRAUMA', key: 't11', name: 'บาดเจ็บหลายระบบ' };
+            }
+            // 1.3 ถ้าคำวินิจฉัยมีคำว่า ถูกยิง/ถูกแทง/Penetrating/แขวนคอ/ผูกคอ ให้ลงข้อ 13 ทันที (ไม่แยกไปช่องท้อง/ทรวงอก)
+            if (/penetrat|penentrat|stab|gunshot|gsw|hanging|ถูกยิง|ถูกแทง|แขวนคอ|ผูกคอ/.test(dx)) {
+                return { group: 'TRAUMA', key: 't13', name: 'อื่นๆ (ถูกยิง,ถูกแทง,แขวนคอ)' };
+            }
+            // คัดแยกเข้าแถวอื่นๆ ของ TRAUMA
+            if (/multiple injury|polytrauma|thoracoabdom|thoroco-abdom/.test(dx)) {
                 return { group: 'TRAUMA', key: 't11', name: 'บาดเจ็บหลายระบบ' };
             }
             if (dg.includes('head injury') || (/sdh|edh|sah|ich|skull|brain contusion|head injury|tbi/.test(dx) && !/jejun|mesent|thorax|abdom/.test(dx))) {
@@ -216,16 +232,6 @@
             }
             if (/maxillo|mandib|zygoma|le fort|lefort|facial fx|orbital/.test(dx)) {
                 return { group: 'TRAUMA', key: 't8', name: 'maxillo' };
-            }
-            if (dg.includes('penetrat') || /penetrat|penentrat|stab|gunshot|gsw|hanging|ถูกยิง|ถูกแทง|แขวนคอ/.test(dx)) {
-                // ถ้าถูกแทง/ทะลุที่ช่องท้องหรือทรวงอกชัดเจน ให้แยกตามอวัยวะ หรือลงข้อ 13 หากเป็นแผลถูกยิง/แทงทั่วไป
-                if (/jejun|ileum|colon|mesent|omentum|liver|spleen|abdom/.test(dx) && !/thorax|thoraco|neck/.test(dx)) {
-                    return { group: 'TRAUMA', key: 't4', name: 'บาดเจ็บช่องท้อง' };
-                }
-                if (/thorax|thoraco|hemothorax|pneumothorax|chest/.test(dx) && !/abdom|neck/.test(dx)) {
-                    return { group: 'TRAUMA', key: 't1', name: 'บาดเจ็บทรวงอก' };
-                }
-                return { group: 'TRAUMA', key: 't13', name: 'อื่นๆ (ถูกยิง,ถูกแทง,แขวนคอ)' };
             }
             if (dg.includes('chest') || /pneumothorax|hemothorax|flail|rib|thorax|chest/.test(dx)) {
                 return { group: 'TRAUMA', key: 't1', name: 'บาดเจ็บทรวงอก' };
@@ -337,20 +343,25 @@
         const shortStartBE = String(fyBE - 1).slice(-2);
         const shortEndBE = String(fyBE).slice(-2);
 
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         document.getElementById('titleTrauma').innerText =
             `สรุปโรคตามระบบในผู้ป่วย TRAUMA หอผู้ป่วย SICU 1 ประจำปี ${fyBE} ( ตุลาคม ${shortStartBE} - กันยายน ${shortEndBE} )`;
         document.getElementById('titleNonTrauma').innerText =
             `สรุปโรคตามระบบในผู้ป่วย NON-TRAUMA หอผู้ป่วย SICU 1 ประจำปี ${fyBE} ( ตุลาคม ${shortStartBE} - กันยายน ${shortEndBE} )`;
 
-        // สร้างช่วงเดือน 12 เดือน (ต.ค. - ก.ย.)
+        // สร้างช่วงเดือน 12 เดือน (ต.ค. - ก.ย.) พร้อมเช็กเดือนในอนาคต
         const fiscalMonths = [];
         for (let i = 0; i < 12; i++) {
             const mIndex = (9 + i) % 12;
             const yCE = (mIndex >= 9) ? startYearCE : startYearCE + 1;
             const mStart = new Date(yCE, mIndex, 1, 0, 0, 0, 0);
             const mEnd = new Date(yCE, mIndex + 1, 0, 23, 59, 59, 999);
-            fiscalMonths.push({ mIndex, yCE, mStart, mEnd });
+            const isFuture = mStart > today;
+            fiscalMonths.push({ mIndex, yCE, mStart, mEnd, isFuture });
         }
+        const futureFlags = fiscalMonths.map(fm => fm.isFuture);
 
         // เตรียมตารางเก็บตัวเลข 12 เดือน
         const traumaMatrix = {};
@@ -372,6 +383,8 @@
             let matchedAnyMonth = false;
 
             fiscalMonths.forEach((fm, idx) => {
+                if (fm.isFuture) return; // ข้ามเดือนในอนาคตที่ยังไม่ถึง
+
                 let inThisMonth = false;
                 if (includeCarry) {
                     // นับรวมยอดยกมาที่นอนคาบเกี่ยวในเดือนนั้น
@@ -396,9 +409,9 @@
             }
         });
 
-        // วาดตาราง TRAUMA และ NON-TRAUMA
-        buildMatrixTable('tbodyTrauma', traumaCategories, traumaMatrix);
-        buildMatrixTable('tbodyNonTrauma', nonTraumaCategories, nonTraumaMatrix);
+        // วาดตาราง TRAUMA และ NON-TRAUMA (ซ่อนยอดเดือนในอนาคต)
+        buildMatrixTable('tbodyTrauma', traumaCategories, traumaMatrix, futureFlags);
+        buildMatrixTable('tbodyNonTrauma', nonTraumaCategories, nonTraumaMatrix, futureFlags);
 
         // วาดตารางสรุป 5 อันดับโรคหลัก
         buildTop5Table('tbodyTop5Trauma', traumaCategories, traumaMatrix);
@@ -423,7 +436,7 @@
         });
     }
 
-    function buildMatrixTable(tbodyId, categories, matrix) {
+    function buildMatrixTable(tbodyId, categories, matrix, futureFlags = []) {
         const tbody = document.getElementById(tbodyId);
         tbody.innerHTML = '';
         const colTotals = new Array(12).fill(0);
@@ -436,8 +449,8 @@
 
             let cellsHtml = '';
             counts.forEach((val, idx) => {
-                colTotals[idx] += val;
-                cellsHtml += `<td class="num">${val > 0 ? val : ''}</td>`;
+                if (!futureFlags[idx]) colTotals[idx] += val;
+                cellsHtml += `<td class="num">${(!futureFlags[idx] && val > 0) ? val : ''}</td>`;
             });
 
             const tr = `<tr>
@@ -450,8 +463,8 @@
         });
 
         let totalCellsHtml = '';
-        colTotals.forEach(val => {
-            totalCellsHtml += `<td>${val}</td>`;
+        colTotals.forEach((val, idx) => {
+            totalCellsHtml += `<td>${futureFlags[idx] ? '' : val}</td>`;
         });
         tbody.insertAdjacentHTML('beforeend', `<tr class="total-row">
             <td colspan="2">รวม</td>
