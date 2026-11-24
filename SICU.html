@@ -759,57 +759,74 @@
         document.getElementById('dischargeStatus').value = (data.status === 'กำลังรักษา (In ICU)') ? '' : (data.status || '');
         document.getElementById('destinationDetail').value = data.destination || '';
         
-        // 4. คะแนน TRISS และ APACHE (พร้อมดึงค่าดิบที่เคยกรอกกลับคืนมา)
-        if (data.triss_score) document.getElementById('outTRISS').innerText = data.triss_score; 
+        // ตัวช่วยแปลง JSON ที่รองรับทั้งคอลัมน์แบบ text และ jsonb (กันพังเงียบ)
+        const safeParse = (val) => {
+            if (!val) return null;
+            if (typeof val === 'object') return val;
+            try { return JSON.parse(val); } catch (e) { console.error("JSON parse error:", e); return null; }
+        };
+
+        // 4. คะแนน TRISS และ APACHE (ดึงค่าดิบกลับคืน + กันคำนวณทับคะแนนเก่าถ้ายังไม่เคยเก็บค่าดิบ)
+        if (data.triss_score) document.getElementById('outTRISS').innerText = data.triss_score;
         if (data.apache_score) document.getElementById('outAPACHE').innerText = data.apache_score;
 
-        if (data.score_raw_data) {
+        const raw = safeParse(data.score_raw_data);
+        if (raw) {
             try {
-                let raw = JSON.parse(data.score_raw_data);
-                
-                // คืนค่าหน้า TRISS
                 if (raw.triss) {
-                    document.getElementById('triss_type').value = raw.triss.type || 'blunt';
-                    document.getElementById('triss_e').value = raw.triss.e || '';
-                    document.getElementById('triss_v').value = raw.triss.v || '';
-                    document.getElementById('triss_m').value = raw.triss.m || '';
-                    document.getElementById('triss_sbp').value = raw.triss.sbp || '';
-                    document.getElementById('triss_rr').value = raw.triss.rr || '';
-                    document.getElementById('ais_head').value = raw.triss.ais_head || '0';
-                    document.getElementById('ais_face').value = raw.triss.ais_face || '0';
-                    document.getElementById('ais_chest').value = raw.triss.ais_chest || '0';
-                    document.getElementById('ais_abdomen').value = raw.triss.ais_abdomen || '0';
-                    document.getElementById('ais_ext').value = raw.triss.ais_ext || '0';
-                    document.getElementById('ais_external').value = raw.triss.ais_external || '0';
-                    calcTRISS(); // สั่งให้คำนวณรหัสสี GCS และยอดรวมใหม่ทันที
+                    const t = raw.triss;
+                    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+                    setVal('triss_type', t.type || 'blunt');
+                    setVal('triss_e', t.e || '');
+                    setVal('triss_v', t.v || '');
+                    setVal('triss_m', t.m || '');
+                    setVal('triss_sbp', t.sbp || '');
+                    setVal('triss_rr', t.rr || '');
+                    setVal('ais_head', t.ais_head || '0');
+                    setVal('ais_face', t.ais_face || '0');
+                    setVal('ais_chest', t.ais_chest || '0');
+                    setVal('ais_abdomen', t.ais_abdomen || '0');
+                    setVal('ais_ext', t.ais_ext || '0');
+                    setVal('ais_external', t.ais_external || '0');
+
+                    // คำนวณใหม่เฉพาะเมื่อมีค่าดิบกรอกไว้จริงเท่านั้น (กันทับคะแนนเก่า)
+                    const hasTrissVal = t.e || t.v || t.m || t.sbp || t.rr ||
+                        ['ais_head','ais_face','ais_chest','ais_abdomen','ais_ext','ais_external'].some(k => parseInt(t[k]) > 0);
+                    if (hasTrissVal) calcTRISS();
                 }
-                
-                // คืนค่าหน้า APACHE II
+
                 if (raw.apache) {
-                    document.getElementById('ap_chronic').value = raw.apache.chronic || '0';
-                    document.getElementById('ap_temp').value = raw.apache.temp || '';
-                    document.getElementById('ap_hr').value = raw.apache.hr || '';
-                    document.getElementById('ap_rr').value = raw.apache.rr || '';
-                    document.getElementById('ap_sbp').value = raw.apache.sbp || '';
-                    document.getElementById('ap_dbp').value = raw.apache.dbp || '';
-                    document.getElementById('ap_ph').value = raw.apache.ph || '';
-                    document.getElementById('ap_paco2').value = raw.apache.paco2 || '';
-                    document.getElementById('ap_pao2').value = raw.apache.pao2 || '';
-                    document.getElementById('ap_fio2').value = raw.apache.fio2 || '';
-                    document.getElementById('ap_e').value = raw.apache.e || '';
-                    document.getElementById('ap_v').value = raw.apache.v || '';
-                    document.getElementById('ap_m').value = raw.apache.m || '';
-                    document.getElementById('ap_hct').value = raw.apache.hct || '';
-                    document.getElementById('ap_wbc').value = raw.apache.wbc || '';
-                    document.getElementById('ap_na').value = raw.apache.na || '';
-                    document.getElementById('ap_k').value = raw.apache.k || '';
-                    document.getElementById('ap_hco3').value = raw.apache.hco3 || '';
-                    document.getElementById('ap_cr').value = raw.apache.cr || '';
-                    document.getElementById('ap_arf').checked = raw.apache.arf || false;
-                    calculateMAP(); // สั่งให้คำนวณ MAP, A-aDO2 และยอด APACHE รวมใหม่ทันที
+                    const a = raw.apache;
+                    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+                    setVal('ap_chronic', a.chronic || '0');
+                    setVal('ap_temp', a.temp || '');
+                    setVal('ap_hr', a.hr || '');
+                    setVal('ap_rr', a.rr || '');
+                    setVal('ap_sbp', a.sbp || '');
+                    setVal('ap_dbp', a.dbp || '');
+                    setVal('ap_ph', a.ph || '');
+                    setVal('ap_paco2', a.paco2 || '');
+                    setVal('ap_pao2', a.pao2 || '');
+                    setVal('ap_fio2', a.fio2 || '');
+                    setVal('ap_e', a.e || '');
+                    setVal('ap_v', a.v || '');
+                    setVal('ap_m', a.m || '');
+                    setVal('ap_hct', a.hct || '');
+                    setVal('ap_wbc', a.wbc || '');
+                    setVal('ap_na', a.na || '');
+                    setVal('ap_k', a.k || '');
+                    setVal('ap_hco3', a.hco3 || '');
+                    setVal('ap_cr', a.cr || '');
+                    const arfEl = document.getElementById('ap_arf');
+                    if (arfEl) arfEl.checked = Boolean(a.arf);
+
+                    // คำนวณใหม่เฉพาะเมื่อมีค่าดิบกรอกไว้จริงเท่านั้น (กันทับคะแนนเก่า)
+                    const hasApacheVal = a.temp || a.hr || a.rr || a.sbp || a.dbp || a.ph ||
+                        a.pao2 || a.fio2 || a.e || a.v || a.m || a.hct || a.wbc || a.na || a.k || a.hco3 || a.cr || a.arf || parseInt(a.chronic) > 0;
+                    if (hasApacheVal) calculateMAP();
                 }
             } catch (err) {
-                console.error("ดึงข้อมูลดิบคะแนนผิดพลาด:", err);
+                console.error("โหลดค่าดิบคะแนนผิดพลาด:", err);
             }
         }
 
@@ -820,69 +837,74 @@
                 cb.checked = compStr.includes(cb.value);
             });
             const otherMatch = compStr.match(/Other: (.*)/);
-            if (otherMatch) document.getElementById('comp_other').value = otherMatch[1];
+            if (otherMatch && document.getElementById('comp_other')) {
+                document.getElementById('comp_other').value = otherMatch[1];
+            }
         }
 
-        // --- 6. ประวัติการผ่าตัด (ป้องกัน Error พังทั้งหน้า) ---
+        // 6. ประวัติการผ่าตัด
         const surgeryContainer = document.getElementById('surgery-container');
         if (surgeryContainer) {
             surgeryContainer.innerHTML = '';
             try {
                 if (data.surgery && data.surgery.trim() !== '') {
-                    // แยกรอบการผ่าตัดด้วยการขึ้นบรรทัดใหม่
-                    let surgLines = data.surgery.split('\n');
+                    const surgLines = data.surgery.split(/\r?\n/);
                     let hasValidSurgery = false;
 
                     surgLines.forEach(s => {
-                        if (s.trim() === '') return;
-                        
-                        // รองรับการเว้นวรรคหลายแบบ (เช่น ':', ' : ', ':-')
-                        let parts = s.includes(' : ') ? s.split(' : ') : s.split(':');
-                        
-                        let sDate = parts[0] ? parts[0].trim() : '';
-                        let sDetail = parts[1] ? parts[1].trim() : '';
-                        
-                        // ถ้าระบบหาเครื่องหมาย : ไม่เจอ ให้เหมาว่าทั้งหมดคือรายละเอียด (ไม่มีวันที่)
-                        if (!sDetail && sDate && !sDate.includes('-')) {
-                            sDetail = sDate;
+                        const line = s.trim();
+                        if (!line) return;
+
+                        const colonIdx = line.indexOf(':');
+                        let sDate = '', sDetail = '';
+                        if (colonIdx !== -1) {
+                            sDate = line.substring(0, colonIdx).trim();
+                            sDetail = line.substring(colonIdx + 1).trim();
+                        } else {
+                            sDetail = line;
+                        }
+
+                        // ถ้า sDate ไม่ใช่รูปแบบ YYYY-MM-DD (เช่นเป็นข้อความธรรมดา) ให้เอาไปรวมเป็นรายละเอียด
+                        if (sDate && !/^\d{4}-\d{2}-\d{2}$/.test(sDate)) {
+                            sDetail = sDetail ? `${sDate} : ${sDetail}` : sDate;
                             sDate = '';
                         }
-                        
-                        if (sDate !== '' || sDetail !== '') {
+
+                        if (sDate || sDetail) {
                             addSurgeryRow(sDate, sDetail);
                             hasValidSurgery = true;
                         }
                     });
 
-                    // ถ้ากรองแล้วไม่มีอะไรเลย ให้เปิดแถวว่างๆ ไว้ 1 แถว
                     if (!hasValidSurgery) addSurgeryRow();
-
                 } else {
-                    addSurgeryRow(); // ถ้าไม่มีประวัติเก่าเลย ให้เปิดแถวว่างๆ
+                    addSurgeryRow();
                 }
             } catch (error) {
-                console.error("ระบบเจอข้อมูลผ่าตัดรูปแบบผิดปกติ แต่ดัก Error ไว้แล้ว:", error);
-                addSurgeryRow(); 
+                console.error("โหลดประวัติการผ่าตัดผิดพลาด:", error);
+                addSurgeryRow();
             }
         }
-        
-        // 7. อุปกรณ์สายสวน
-        ['ett-container', 'vent-container', 'foley-container', 'cline-container', 'piv-container'].forEach(id => {
+
+        // 7. อุปกรณ์สายสวน (รองรับทั้ง text และ jsonb)
+        const devContainers = [
+            { id: 'ett-container', key: 'ett' },
+            { id: 'vent-container', key: 'vent' },
+            { id: 'foley-container', key: 'foley' },
+            { id: 'cline-container', key: 'cline' },
+            { id: 'piv-container', key: 'piv' }
+        ];
+        const devs = safeParse(data.device_records);
+        devContainers.forEach(({ id, key }) => {
             const el = document.getElementById(id);
-            if (el) el.innerHTML = '';
+            if (!el) return;
+            el.innerHTML = '';
+            if (devs && Array.isArray(devs[key]) && devs[key].length > 0) {
+                devs[key].forEach(d => addDeviceRow(id, d.on || '', d.off || ''));
+            } else {
+                addDeviceRow(id);
+            }
         });
-        if (data.device_records) {
-            try {
-                let devs = JSON.parse(data.device_records);
-                if (devs.ett && devs.ett.length > 0) devs.ett.forEach(d => addDeviceRow('ett-container', d.on, d.off)); else addDeviceRow('ett-container');
-                if (devs.vent && devs.vent.length > 0) devs.vent.forEach(d => addDeviceRow('vent-container', d.on, d.off)); else addDeviceRow('vent-container');
-                if (devs.foley && devs.foley.length > 0) devs.foley.forEach(d => addDeviceRow('foley-container', d.on, d.off)); else addDeviceRow('foley-container');
-                if (devs.cline && devs.cline.length > 0) devs.cline.forEach(d => addDeviceRow('cline-container', d.on, d.off)); else addDeviceRow('cline-container');
-                if (devs.piv && devs.piv.length > 0) devs.piv.forEach(d => addDeviceRow('piv-container', d.on, d.off)); else addDeviceRow('piv-container');
-            } catch(e) {}
-        } else { 
-            addDeviceRow('ett-container'); addDeviceRow('vent-container'); addDeviceRow('foley-container'); addDeviceRow('cline-container'); addDeviceRow('piv-container');
-        }
 
         // 8. แยกข้อมูลที่อยู่ลง 4 ช่องอย่างปลอดภัย (ฉบับปรับปรุงแก้บั๊ก Dropdown)
     try {
