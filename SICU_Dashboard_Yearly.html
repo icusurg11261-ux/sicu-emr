@@ -509,7 +509,7 @@
         });
     }
 
-    function renderYearlyTable(data) {
+   function renderYearlyTable(data) {
         const tbody = document.getElementById('yearlyStatsBody');
         tbody.innerHTML = '';
 
@@ -520,13 +520,18 @@
             {m: 6, name: "ก.ค."}, {m: 7, name: "ส.ค."}, {m: 8, name: "ก.ย."}
         ];
 
-        let bedCount = 8;
+        const bedCount = 8;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         let filterEnd = document.getElementById('filterEndMonth').value;
-        let targetYearCE = new Date().getFullYear();
+        let targetYearCE = today.getFullYear();
         if (filterEnd) {
             targetYearCE = parseInt(filterEnd.split('-')[0]);
             let filterMonth = parseInt(filterEnd.split('-')[1]);
             if (filterMonth >= 10) targetYearCE += 1;
+        } else if (today.getMonth() >= 9) {
+            targetYearCE += 1;
         }
 
         let rowsData = {
@@ -537,27 +542,43 @@
             9: new Array(12).fill(0), 10: new Array(12).fill(0), 11: new Array(12).fill(0)
         };
 
+        let isFutureArr = new Array(12).fill(false);
+        let elapsedDaysPerMonth = new Array(12).fill(0);
+
         fiscalMonths.forEach((fm, colIdx) => {
-            let admitsNew = 0, admitsMove = 0, dcTotal = 0, dcMove = 0, dcHome = 0, dcRefer = 0, dcDeath = 0, sumLosMonth = 0, carryOver = 0;
-            
             let yCE = fm.m >= 9 ? targetYearCE - 1 : targetYearCE;
             let monthStart = new Date(yCE, fm.m, 1, 0, 0, 0);
             let monthEnd = new Date(yCE, fm.m + 1, 0, 0, 0, 0);
 
+            // 1. ถ้าเดือนนั้นยังไม่มาถึง (อยู่ในอนาคต) ให้ข้าม ไม่คำนวณ
+            if (monthStart > today) {
+                isFutureArr[colIdx] = true;
+                return;
+            }
+
+            // 2. ถ้าเป็นเดือนปัจจุบัน ให้ตัดยอดวันนอนแค่ "วันนี้" ไม่นับล่วงหน้าถึงสิ้นเดือน
+            let isCurrentMonth = (today >= monthStart && today <= monthEnd);
+            let effectiveEnd = isCurrentMonth ? new Date(today) : new Date(monthEnd);
+            let daysForRate = isCurrentMonth ? today.getDate() : monthEnd.getDate();
+            elapsedDaysPerMonth[colIdx] = daysForRate;
+
+            let admitsNew = 0, admitsMove = 0, dcTotal = 0, dcMove = 0, dcHome = 0, dcRefer = 0, dcDeath = 0, sumLosMonth = 0, carryOver = 0;
+
             data.forEach(p => {
-                if(!p.icu_in_date) return;
+                if (!p.icu_in_date) return;
                 let dIn = new Date(p.icu_in_date.split('T')[0]);
                 let dOut = p.discharge_date ? new Date(p.discharge_date.split('T')[0]) : new Date(2100, 0, 1);
-                dIn.setHours(0,0,0,0); dOut.setHours(0,0,0,0);
+                dIn.setHours(0, 0, 0, 0);
+                dOut.setHours(0, 0, 0, 0);
 
                 if (dIn < monthStart && dOut >= monthStart) carryOver++;
 
-                if (dIn >= monthStart && dIn <= monthEnd) {
+                if (dIn >= monthStart && dIn <= effectiveEnd) {
                     if (p.adm_type && p.adm_type.includes('รับใหม่')) admitsNew++;
                     else admitsMove++;
                 }
 
-                if (p.discharge_date && dOut >= monthStart && dOut <= monthEnd) {
+                if (p.discharge_date && dOut >= monthStart && dOut <= effectiveEnd) {
                     dcTotal++;
                     if (p.status === 'ย้าย') dcMove++;
                     else if (p.status === 'จำหน่ายกลับบ้าน') dcHome++;
@@ -565,7 +586,7 @@
                     else if (p.status === 'เสียชีวิต') dcDeath++;
                 }
 
-                sumLosMonth += calcDaysStrict(p.icu_in_date, p.discharge_date, monthStart, monthEnd);
+                sumLosMonth += calcDaysStrict(p.icu_in_date, p.discharge_date, monthStart, effectiveEnd);
             });
 
             rowsData[1][colIdx] = carryOver;
@@ -576,21 +597,20 @@
             rowsData["4_2"][colIdx] = dcHome;
             rowsData["4_3"][colIdx] = dcRefer;
             rowsData["4_4"][colIdx] = dcDeath;
-            
+
             rowsData[5][colIdx] = carryOver + admitsNew + admitsMove;
             rowsData[6][colIdx] = sumLosMonth;
 
-            let daysInMonth = new Date(yCE, fm.m + 1, 0).getDate();
-            let totalBedDays = bedCount * daysInMonth;
-            
+            let totalBedDays = bedCount * daysForRate;
             rowsData[7][colIdx] = totalBedDays > 0 ? ((sumLosMonth * 100) / totalBedDays).toFixed(2) : 0;
-            rowsData[8][colIdx] = (sumLosMonth / daysInMonth).toFixed(2);
+            rowsData[8][colIdx] = daysForRate > 0 ? (sumLosMonth / daysForRate).toFixed(2) : 0;
             rowsData[9][colIdx] = rowsData[5][colIdx] > 0 ? (sumLosMonth / rowsData[5][colIdx]).toFixed(2) : 0;
             rowsData[10][colIdx] = (dcTotal / bedCount).toFixed(2);
-            
-            // แก้ไขสูตรข้อ 11 (อัตราตายรายเดือน) ให้หารด้วยยอดจำหน่ายทั้งหมด (dcTotal)
             rowsData[11][colIdx] = dcTotal > 0 ? ((dcDeath * 100) / dcTotal).toFixed(2) : 0;
         });
+
+        // เก็บค่าเฉลี่ยผู้ป่วยต่อวันไว้ใช้คำนวณ ชม.การพยาบาล (ข้อ 13)
+        window._avgPatientsPerDay = rowsData[8];
 
         let tableStructure = [
             {no: 1, name: "ยอดยกมา", key: 1, type: "sum"},
@@ -603,19 +623,23 @@
             {no: "", name: "- ถึงแก่กรรม (เสียชีวิต)", key: "4_4", type: "sum", sub: true},
             {no: 5, name: "จำนวนผู้ป่วยทั้งหมด", key: 5, type: "sum"},
             {no: 6, name: "รวมวันรักษา (LOS)", key: 6, type: "sum"},
-            {no: 7, name: "อัตราครองเตียง (%)", key: 7, type: "avg", suffix: "%"},
+            {no: 7, name: "อัตราครองเตียง (%)", key: 7, type: "avg"},
             {no: 8, name: "เฉลี่ยผู้ป่วยต่อวัน (คน/วัน)", key: 8, type: "avg"},
             {no: 9, name: "เฉลี่ยวันนอน (วัน/คน) Average LOS", key: 9, type: "avg"},
             {no: 10, name: "อัตราการหมุนเวียนเตียง (คน/เตียง)", key: 10, type: "sum"},
-            {no: 11, name: "อัตราตาย (%)", key: 11, type: "avg", suffix: "%"},
-            {no: 13, name: "จำนวนเวร RN เฉลี่ยต่อวัน", key: 13, type: "input"},
+            {no: 11, name: "อัตราตาย (%)", key: 11, type: "avg"},
+            {no: 13, name: "จำนวนเวร RN เฉลี่ยต่อวัน [กรอกเอง]", key: 13, type: "input"},
+            {no: "", name: "↳ ชม.การพยาบาล/วันนอน (คำนวณอัตโนมัติ)", key: "13_nhppd", type: "nhppd", sub: true},
             {no: 14, name: "Productivity (%) [กรอกข้อมูลเอง]", key: 14, type: "input_prod"}
         ];
 
+        const totalElapsedDays = elapsedDaysPerMonth.reduce((a, b) => a + b, 0);
+        const totalLOSYear = rowsData[6].reduce((a, b) => a + b, 0);
+
         tableStructure.forEach(row => {
             let tr = document.createElement('tr');
-            if(row.sub) tr.style.backgroundColor = "#f8fafc";
-            
+            if (row.sub) tr.style.backgroundColor = "#f8fafc";
+
             let tdNo = document.createElement('td');
             tdNo.className = "num fw-bold text-secondary";
             tdNo.innerText = row.no;
@@ -627,25 +651,38 @@
             tr.appendChild(tdName);
 
             let rowSum = 0;
-            let countValidMonths = 0;
 
             fiscalMonths.forEach((fm, colIdx) => {
                 let td = document.createElement('td');
                 td.className = "num";
 
-                if (row.type === "sum" || row.type === "avg") {
+                if (isFutureArr[colIdx]) {
+                    td.innerText = "-";
+                    td.classList.add("text-muted");
+                } else if (row.type === "sum" || row.type === "avg") {
                     let val = parseFloat(rowsData[row.key][colIdx]);
                     td.innerText = isNaN(val) ? 0 : val;
-                    if (val > 0 || (row.key === 7 || row.key === 8 || row.key === 9)) {
-                        rowSum += val;
-                        if(rowsData[5][colIdx] > 0 || rowsData[6][colIdx] > 0) countValidMonths++;
-                    }
-                } else if (row.type === "input" || row.type === "input_prod") {
+                    rowSum += isNaN(val) ? 0 : val;
+                } else if (row.type === "input") {
                     let input = document.createElement('input');
-                    input.type = row.type === "input" ? "number" : "text";
+                    input.type = "number";
+                    input.step = "0.1";
                     input.className = "rn-input";
-                    input.style.width = row.type === "input_prod" ? "55px" : "50px";
-                    input.value = row.type === "input" ? "3" : "90.0";
+                    input.id = `rn_val_${colIdx}`;
+                    input.placeholder = "เวร/วัน";
+                    input.oninput = calculateNursingHours;
+                    td.appendChild(input);
+                    rowSum = "-";
+                } else if (row.type === "nhppd") {
+                    td.id = `nhppd_cell_${colIdx}`;
+                    td.innerText = "-";
+                    rowSum = "-";
+                } else if (row.type === "input_prod") {
+                    let input = document.createElement('input');
+                    input.type = "text";
+                    input.className = "rn-input";
+                    input.style.width = "55px";
+                    input.placeholder = "%";
                     td.appendChild(input);
                     rowSum = "-";
                 }
@@ -656,22 +693,24 @@
             tdTotal.className = "num fw-bold text-primary";
             if (rowSum === "-") {
                 tdTotal.innerText = "-";
-            } else if (row.key === 7) { 
-                let totalDaysYear = 365;
-                tdTotal.innerText = ((rowSum * 100) / (totalDaysYear * 8)).toFixed(2);
-            } else if (row.key === 9) { 
+            } else if (row.key === 1) {
+                // ยอดยกมาต้นปีงบประมาณ (ต.ค.) ไม่ใช่ผลรวมทุกเดือน
+                tdTotal.innerText = rowsData[1][0];
+            } else if (row.key === 7) {
+                // แก้สูตรอัตราครองเตียงรวม = (วันนอนรวมจริง x 100) / (วันที่ผ่านมาจริง x 8 เตียง)
+                tdTotal.innerText = totalElapsedDays > 0 ? ((totalLOSYear * 100) / (totalElapsedDays * bedCount)).toFixed(2) : 0;
+            } else if (row.key === 8) {
+                tdTotal.innerText = totalElapsedDays > 0 ? (totalLOSYear / totalElapsedDays).toFixed(2) : 0;
+            } else if (row.key === 9) {
                 let totalPts = rowsData[5].reduce((a, b) => a + b, 0);
-                tdTotal.innerText = totalPts > 0 ? (rowsData[6].reduce((a, b) => a + b, 0) / totalPts).toFixed(2) : 0;
-            } else if (row.key === 10) { 
+                tdTotal.innerText = totalPts > 0 ? (totalLOSYear / totalPts).toFixed(2) : 0;
+            } else if (row.key === 10) {
                 let totalDc = rowsData[4].reduce((a, b) => a + b, 0);
                 tdTotal.innerText = (totalDc / bedCount).toFixed(2);
-            } else if (row.key === 11) { 
-                // แก้ไขสูตรข้อ 11 (อัตราตายรวม) ให้หารด้วย ยอดจำหน่ายทั้งหมด (Total D/C แถว 4) แทนยอดผู้ป่วยทั้งหมด
+            } else if (row.key === 11) {
                 let totalDc = rowsData[4].reduce((a, b) => a + b, 0);
                 let totalDeath = rowsData["4_4"].reduce((a, b) => a + b, 0);
                 tdTotal.innerText = totalDc > 0 ? ((totalDeath * 100) / totalDc).toFixed(2) : 0;
-            } else if (row.type === "avg") {
-                tdTotal.innerText = countValidMonths > 0 ? (rowSum / countValidMonths).toFixed(2) : 0;
             } else {
                 tdTotal.innerText = rowSum;
             }
@@ -680,14 +719,19 @@
         });
     }
 
-    function calculateProductivity() {
+    // คำนวณ ชม.การพยาบาล/วันนอน อัตโนมัติตามสูตร Excel: (เวร RN เฉลี่ยต่อวัน x 8) / เฉลี่ยผู้ป่วยต่อวัน
+    function calculateNursingHours() {
         for (let colIdx = 0; colIdx < 12; colIdx++) {
             let rnInput = document.getElementById(`rn_val_${colIdx}`);
-            let prodCell = document.getElementById(`prod_cell_${colIdx}`);
-            if (rnInput && prodCell) {
-                let rnVal = parseFloat(rnInput.value) || 0;
-                let prod = rnVal > 0 ? (92 + (rnVal * 0.5)).toFixed(2) : "0.00";
-                prodCell.innerText = prod + "%";
+            let cell = document.getElementById(`nhppd_cell_${colIdx}`);
+            if (rnInput && cell) {
+                let rnVal = parseFloat(rnInput.value);
+                let avgPts = parseFloat((window._avgPatientsPerDay || [])[colIdx]) || 0;
+                if (!isNaN(rnVal) && rnVal > 0 && avgPts > 0) {
+                    cell.innerText = ((rnVal * 8) / avgPts).toFixed(2);
+                } else {
+                    cell.innerText = "-";
+                }
             }
         }
     }
