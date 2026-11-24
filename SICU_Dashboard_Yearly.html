@@ -89,7 +89,7 @@
             <select class="form-select border-secondary" id="filterDisease" onchange="applyFilters()" style="min-width: 200px;">
                 <option value="">-- รวมทุกกลุ่มโรค --</option>
                 <option>Multiple injury (MI)</option><option>Head injury (HI)</option><option>Haemorrhagic stroke (CVD)</option>
-                <option>Brain tumor</option><option>Blunt abdomen injury</option><option>Chest injury</option><option>ORTHO</option><option>GEN</option>
+                <option>Brain tumor</option><option>Penetrating injury (ถูกยิง/ถูกแทง)</option><option>Blunt abdomen injury</option><option>Chest injury</option><option>ORTHO</option><option>GEN</option>
             </select>
         </div>
         <div class="ms-auto">
@@ -257,6 +257,10 @@
         const dg = (p.disease_group || '').toLowerCase();
         const dx = ((p.primary_diagnosis || '') + ' ' + (p.surgery || '')).toLowerCase();
         
+        // แยกกลุ่มถูกยิง/ถูกแทง ออกมาก่อนกลุ่ม Trauma ทั่วไป
+    if (/penetrat|stab|gsw|gunshot|ถูกยิง|ถูกแทง|มีด|ปืน/.test(dg) || /penetrat|stab|gsw|gunshot|ถูกยิง|ถูกแทง|มีด|ปืน/.test(dx)) {
+        return 'ถูกยิง/ถูกแทง (Penetrating)';
+    }
         if (/multiple injury|head injury|blunt|chest injury|trauma|penetrat/.test(dg) || /multiple injury|polytrauma|blunt|penetrat/.test(dx)) {
             if (dg.includes('head') || /sdh|edh|sah|ich|skull|brain contusion|tbi/.test(dx)) return 'Head injury (HI)';
             if (dg.includes('multiple') || /multiple injury|polytrauma/.test(dx)) return 'Multiple injury (MI)';
