@@ -403,8 +403,7 @@
                                 <option value="2">2 = แขนขาเหยียดเกร็ง (Decerebrate)</option>
                                 <option value="1">1 = ไม่เคลื่อนไหวเลย</option>
                             </select>
-                            <input type="hidden" id="ap_gcs">
-                            <input type="hidden" id="ap_hco3">
+                            <input type="hidden" id="ap_gcs">                           
                         </div>
                     </div>
 
@@ -953,6 +952,7 @@
         console.error(err);
         if (document.getElementById('addr_detail')) document.getElementById('addr_detail').value = data.address || '';
     }
+}
 
     let currentTargetId = '';
     function triggerScan(targetId) { currentTargetId = targetId; document.getElementById('image-uploader').click(); }
@@ -1458,19 +1458,7 @@ function updateTambon() {
         tamSelect.disabled = false;
     }
 }
-// คำนวณ MAP อัตโนมัติเมื่อมีการพิมพ์ SBP หรือ DBP
-function calculateMAP() {
-    let sbp = parseFloat(document.getElementById('ap_sbp').value);
-    let dbp = parseFloat(document.getElementById('ap_dbp').value);
-    let mapField = document.getElementById('ap_map');
-    
-    if (!isNaN(sbp) && !isNaN(dbp)) {
-        let map = (sbp + (2 * dbp)) / 3;
-        mapField.value = map.toFixed(2); // ปัดทศนิยม 2 ตำแหน่ง
-    } else {
-        mapField.value = "";
-    }
-}
+
 // ฟังก์ชันตรวจสอบผู้ป่วยรับซ้ำ (Readmission) ดึงข้อมูลครบทุกฟิลด์
 async function checkReadmission(inputHn) {
     if (editHN || !inputHn) return;
