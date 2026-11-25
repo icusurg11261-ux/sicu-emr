@@ -24,6 +24,14 @@
         .badge-carryover { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; display: inline-block; margin-bottom: 4px; }
         .badge-status-active { background-color: #ffc107; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
         .badge-status-move { background-color: #198754; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .badge-status-death { background-color: #dc3545; color: white; padding: 2px 7px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+        .table tbody tr.row-death > td { background-color: #fff1f2 !important; }
+        .table tbody tr.row-death:hover > td { background-color: #ffe4e6 !important; }
+        .table tbody tr.row-death > td:first-child { border-left: 5px solid #dc3545 !important; }
+        .no-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 26px; padding: 0 7px; border-radius: 50rem; font-weight: 700; font-size: 0.78rem; cursor: pointer; margin-bottom: 4px; }
+        .no-complete { background-color: #198754; color: #fff; }
+        .no-incomplete { background-color: #fd7e14; color: #fff; box-shadow: 0 0 0 2px #ffe8cc; }
+        #missingTooltip { display: none; position: fixed; z-index: 9999; background: #1e293b; color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 0.78rem; line-height: 1.5; max-width: 280px; box-shadow: 0 8px 20px rgba(0,0,0,0.25); pointer-events: none; }
         .text-primary-custom { color: #0d6efd; font-weight: bold; }
     </style>
 </head>
@@ -104,6 +112,12 @@
             <span class="badge border" style="background:#ffe3e3; color:#c92a2a; border-color:#ffa8a8 !important;">Re-op: <strong id="sumReop">0</strong> ครั้ง (<span id="sumReopRate">0.00</span>%)</span>            
         </div>
     </div>
+    <!-- คำอธิบายสัญลักษณ์สี -->
+    <div class="d-flex flex-wrap align-items-center gap-3 mb-2 px-1 small text-secondary">
+        <span><span class="no-badge no-complete" style="height:20px; min-width:20px; font-size:0.7rem; margin:0 4px 0 0; cursor:default;">1</span> ข้อมูลครบถ้วน</span>
+        <span><span class="no-badge no-incomplete" style="height:20px; min-width:20px; font-size:0.7rem; margin:0 4px 0 0; cursor:default;">2</span> ยังขาดข้อมูล (ชี้เมาส์เพื่อดูรายการ / คลิกเพื่อเข้าไปเติม)</span>
+        <span><span class="badge-status-death" style="margin-right:4px;">เสียชีวิต</span> พื้นหลังแถบสีแดงอ่อน</span>
+    </div>
 
     <!-- Data Table -->
     <div class="table-wrapper">
@@ -147,7 +161,7 @@
         </div>
     </div>
 </div>
-
+<div id="missingTooltip"></div>
 <script>
     const supabaseUrl = 'https://aakyylpfusmwlsvksaim.supabase.co';
     const supabaseKey = 'sb_publishable_LjzvHRqLIDSE8OQhEHJPVw_Lb5XL9T8';
@@ -492,7 +506,72 @@
             filteredReopInIcu
         };
     }
+    // ตรวจสอบรายการข้อมูลที่ยังขาดของคนไข้แต่ละราย
+    function getMissingFields(p, totalDevDays) {
+        const missing = [];
+        if (!p.firstname || !p.lastname) missing.push('ชื่อ-สกุล');
+        if (!p.age) missing.push('อายุ');
+        if (!p.address || !p.address.trim()) missing.push('ที่อยู่');
+        if (!p.disease_group || !p.disease_group.trim()) missing.push('กลุ่มโรคหลัก');
+        if (!p.primary_diagnosis || !p.primary_diagnosis.trim()) missing.push('การวินิจฉัยโรคหลัก');
+        if (!p.icu_reason || !p.icu_reason.trim()) missing.push('สาเหตุเข้า ICU');
+        if (!p.doctor_owner || !p.doctor_owner.trim()) missing.push('แพทย์เจ้าของไข้');
 
+        // คะแนน APACHE II (เตือนถ้าว่าง หรือยังเป็น 0)
+        const apVal = parseFloat(p.apache_score);
+        if (p.apache_score === null || p.apache_score === undefined || String(p.apache_score).trim() === '' || isNaN(apVal) || apVal === 0) {
+            missing.push('คะแนน APACHE II (ยังไม่กรอก/เป็น 0)');
+        }
+
+        // คะแนน TRISS (เตือนเฉพาะกลุ่ม Trauma ที่ยังว่างหรือ 0%)
+        const dg = (p.disease_group || '').toLowerCase();
+        const isTrauma = /multiple injury|head injury|blunt|chest injury|penetrat|trauma|ถูกยิง|ถูกแทง/.test(dg);
+        const trVal = parseFloat(String(p.triss_score || '').replace('%', ''));
+        if (isTrauma && (isNaN(trVal) || trVal === 0)) {
+            missing.push('คะแนน TRISS (เคส Trauma ยังเป็น 0%)');
+        }
+
+        // อุปกรณ์สายสวน
+        if (totalDevDays === 0) {
+            missing.push('วันใส่อุปกรณ์ (ETT/Vent/Cath/IV/C-Line)');
+        }
+
+        // ประวัติผ่าตัด (เตือนเฉพาะเคสที่รับหลังผ่าตัด OR หรือระบุ P/O แต่ยังไม่ได้ลง)
+        const isPostOp = (p.adm_type || '').includes('OR') || (p.adm_type || '').includes('หลังผ่าตัด') || /p\/o|หลังผ่าตัด/i.test(p.icu_reason || '');
+        if (isPostOp && (!p.surgery || !p.surgery.trim())) {
+            missing.push('ประวัติการผ่าตัด');
+        }
+
+        // ความสอดคล้องของสถานะจำหน่าย
+        if (p.discharge_date && (!p.status || p.status === 'กำลังรักษา (In ICU)')) {
+            missing.push('สถานะการจำหน่าย');
+        }
+        if ((p.status === 'ย้าย' || p.status === 'Refer') && (!p.destination || !p.destination.trim())) {
+            missing.push('ปลายทางที่ย้าย/Refer');
+        }
+
+        return missing;
+    }
+
+    function showMissingTip(el, encodedHtml) {
+        const tip = document.getElementById('missingTooltip');
+        if (!tip) return;
+        tip.innerHTML = decodeURIComponent(encodedHtml);
+        tip.style.display = 'block';
+        const rect = el.getBoundingClientRect();
+        let topPos = rect.top;
+        if (topPos + tip.offsetHeight > window.innerHeight - 12) {
+            topPos = Math.max(12, window.innerHeight - tip.offsetHeight - 12);
+        }
+        tip.style.left = (rect.right + 10) + 'px';
+        tip.style.top = topPos + 'px';
+    }
+
+    function hideMissingTip() {
+        const tip = document.getElementById('missingTooltip');
+        if (tip) tip.style.display = 'none';
+    }
+    
     function renderTable(data, fStart, fEnd, hasDateFilter, isSingleMonth) {
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
@@ -573,7 +652,12 @@
                 <span class="text-secondary">AP: ${p.apache_score || '-'} | TRISS: ${p.triss_score || '-'}</span>
             `;
 
-            let outStatusBadge = p.status === 'กำลังรักษา (In ICU)' ? `<span class="badge-status-active">ยังไม่ออก</span>` : `<span class="badge-status-move">${p.status || '-'}</span>`;
+            const isDeath = p.status === 'เสียชีวิต';
+            let outStatusBadge = p.status === 'กำลังรักษา (In ICU)'
+                ? `<span class="badge-status-active">ยังไม่ออก</span>`
+                : isDeath
+                    ? `<span class="badge-status-death">เสียชีวิต</span>`
+                    : `<span class="badge-status-move">${p.status || '-'}</span>`;
             const moveInfo = `
                 <div class="info-box">
                     <span class="text-primary-custom">รับ:</span> ${p.adm_type || '-'}<br>
@@ -627,9 +711,22 @@
                 'ที่อยู่': p.address || ''
             });
 
-            const row = `<tr>
+            const totalDevDays = ettTotal + ventTotal + foleyTotal + clineTotal + pivTotal;
+            const missingList = getMissingFields(p, totalDevDays);
+            const isComplete = missingList.length === 0;
+            const tipHtml = isComplete
+                ? `<div style="color:#4ade80; font-weight:bold;">✅ ลงข้อมูลครบถ้วนแล้ว</div>`
+                : `<div style="color:#fbbf24; font-weight:bold; margin-bottom:4px;">⚠️ ยังขาดข้อมูล (${missingList.length} รายการ):</div>` +
+                  missingList.map(m => `• ${m}`).join('<br>') +
+                  `<div style="color:#94a3b8; font-size:0.7rem; margin-top:5px;">คลิกที่ตัวเลขเพื่อเข้าไปเติมข้อมูล</div>`;
+            const encodedTip = encodeURIComponent(tipHtml);
+
+            const row = `<tr class="${isDeath ? 'row-death' : ''}">
                 <td class="text-center align-top">
-                    <div class="fw-bold mb-1">${index + 1}</div>
+                    <div class="no-badge ${isComplete ? 'no-complete' : 'no-incomplete'}"
+                         onmouseenter="showMissingTip(this, '${encodedTip}')"
+                         onmouseleave="hideMissingTip()"
+                         onclick="editPatient('${p.hn}')">${index + 1}</div><br>
                     <button class="btn btn-sm btn-outline-danger px-1 py-0" style="font-size: 0.75rem;" onclick="deletePatient('${p.hn}')" title="ลบข้อมูล">🗑️</button>
                 </td>
                 <td>${patientInfo}</td>
