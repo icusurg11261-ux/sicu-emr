@@ -73,11 +73,25 @@
             </div>
         </div>
 
+        <!-- แถวข้อมูลญาติสำหรับติดต่อ (เพิ่มใหม่) -->
+        <div class="row g-3 mt-1">
+            <div class="col-md-6">
+                <label class="form-label fw-bold">ชื่อญาติ / ความสัมพันธ์</label>
+                <input type="text" class="form-control" id="relativeName" placeholder="เช่น นางสมศรี (ภรรยา)">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-bold">เบอร์โทรญาติสำหรับติดต่อ</label>
+                <input type="tel" class="form-control" id="relativePhone" placeholder="เช่น 081-234-5678">
+            </div>
+        </div>
+
+        <!-- แถววัน-เวลาเข้า ICU และกลุ่มโรค (เพิ่มช่องเวลาเข้า) -->
         <div class="row g-3 mt-1 align-items-end">
             <div class="col-md-2"><label class="form-label text-danger">วันที่เข้า ICU *</label><input type="date" class="form-control border-danger" id="icuInDate"></div>
+            <div class="col-md-2"><label class="form-label text-danger">เวลาเข้า ICU</label><input type="time" class="form-control border-danger" id="icuInTime"></div>
             <div class="col-md-2"><label class="form-label text-danger">ประเภทรับเข้า *</label><select class="form-select border-danger" id="admType"><option value="">-- เลือก --</option><option>รับใหม่ (ER/OPD)</option><option>รับย้าย (จาก Ward)</option><option>รับหลังผ่าตัด (OR)</option><option>Refer</option></select></div>
-            <div class="col-md-3"><label class="form-label">รับจาก (ระบุแผนก/รพ.)</label><input type="text" class="form-control" id="admFrom"></div>
-            <div class="col-md-5"><label class="form-label text-danger">กลุ่มโรคหลัก *</label><input class="form-control border-danger" list="diseaseList" id="diseaseGroup"><datalist id="diseaseList"><option value="Multiple injury (MI)"><option value="Head injury (HI)"><option value="Haemorrhagic stroke (CVD)"><option value="Brain tumor"><option value="Penetrating injury (ถูกยิง/ถูกแทง)"></option><option value="Blunt abdomen injury"><option value="Chest injury"><option value="ORTHO"><option value="GEN"></datalist></div>
+            <div class="col-md-2"><label class="form-label">รับจาก (แผนก/รพ.)</label><input type="text" class="form-control" id="admFrom"></div>
+            <div class="col-md-4"><label class="form-label text-danger">กลุ่มโรคหลัก *</label><input class="form-control border-danger" list="diseaseList" id="diseaseGroup"><datalist id="diseaseList"><option value="Multiple injury (MI)"><option value="Head injury (HI)"><option value="Penetrating injury (ถูกยิง/ถูกแทง)"><option value="Haemorrhagic stroke (CVD)"><option value="Brain tumor"><option value="Blunt abdomen injury"><option value="Chest injury"><option value="ORTHO"><option value="GEN"></datalist></div>
         </div>
         
         <div class="row g-3 mt-1 align-items-end">
@@ -651,11 +665,15 @@
                 </div>
                 <div class="card-body bg-light">
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label text-danger fw-bold">วันที่จำหน่าย *</label>
                             <input type="date" class="form-control border-danger" id="icuOutDate">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-2">
+                            <label class="form-label text-danger fw-bold">เวลาจำหน่าย</label>
+                            <input type="time" class="form-control border-danger" id="icuOutTime">
+                        </div>
+                        <div class="col-md-3">
                             <label class="form-label text-danger fw-bold">สถานะการจำหน่าย *</label>
                             <select class="form-select border-danger" id="dischargeStatus">
                                 <option value="">-- เลือกสถานะ --</option>
@@ -738,6 +756,9 @@
         document.getElementById('age').value = data.age || ''; 
 
         document.getElementById('icuInDate').value = data.icu_in_date ? data.icu_in_date.split('T')[0] : '';
+        document.getElementById('icuInTime').value = data.icu_in_time ? data.icu_in_time.slice(0, 5) : '';
+        document.getElementById('relativeName').value = data.relative_name || '';
+        document.getElementById('relativePhone').value = data.relative_phone || '';
         document.getElementById('admType').value = data.adm_type || ''; 
         document.getElementById('admFrom').value = data.adm_from || ''; 
         document.getElementById('diseaseGroup').value = data.disease_group || '';
@@ -756,6 +777,7 @@
         document.getElementById('docOwner').value = data.doctor_owner || ''; 
         document.getElementById('docSupport').value = data.doctor_support || '';
         document.getElementById('icuOutDate').value = data.discharge_date ? data.discharge_date.split('T')[0] : ''; 
+        document.getElementById('icuOutTime').value = data.discharge_time ? data.discharge_time.slice(0, 5) : '';
         document.getElementById('dischargeStatus').value = (data.status === 'กำลังรักษา (In ICU)') ? '' : (data.status || '');
         document.getElementById('destinationDetail').value = data.destination || '';
         
@@ -1404,6 +1426,10 @@
             triss_score: document.getElementById('outTRISS').innerText, apache_score: document.getElementById('outAPACHE').innerText, score_raw_data: JSON.stringify(scoreRawData), surgery: surgeries.join('\n'), device_records: JSON.stringify(deviceRecords),
             complication: comps.join(', '), 
             status: dStatus ? dStatus : 'กำลังรักษา (In ICU)', discharge_date: document.getElementById('icuOutDate').value || null, destination: document.getElementById('destinationDetail').value
+            icu_in_time: document.getElementById('icuInTime').value || null,
+            discharge_time: document.getElementById('icuOutTime').value || null,
+            relative_name: document.getElementById('relativeName').value.trim(),
+            relative_phone: document.getElementById('relativePhone').value.trim(),
         };
 
         const { data, error } = await supabaseClient.from('patients').upsert([patientData]);
@@ -1515,6 +1541,8 @@ async function checkReadmission(inputHn) {
                 document.getElementById('icuOutDate').value = '';
                 document.getElementById('dischargeStatus').value = '';
                 document.getElementById('destinationDetail').value = '';
+                document.getElementById('icuInTime').value = '';
+                document.getElementById('icuOutTime').value = '';
             }, 500); // หน่วงเวลาเล็กน้อยเพื่อให้หน้าจอโหลดข้อมูลเสร็จก่อน
             
         } else {
