@@ -864,12 +864,13 @@
             }
         }
 
-        // 6. ประวัติการผ่าตัด
+        // 6. ประวัติการผ่าตัด (รองรับตัวเลือก OR / REOP / PROC)
         const surgeryContainer = document.getElementById('surgery-container');
         if (surgeryContainer) {
             surgeryContainer.innerHTML = '';
             try {
                 if (data.surgery && data.surgery.trim() !== '') {
+                    const nonOrRegex = /\b(at\s*er|at\s*sicu\d*|at\s*icu|bedside|egd|colonoscop\w*|bronchoscop\w*|gastroscop\w*|suture\s*wound|on\s+(?:(?:right|left|rt\.?|lt\.?)\s+)?icd)\b/i;
                     const surgLines = data.surgery.split(/\r?\n/);
                     let hasValidSurgery = false;
 
@@ -886,14 +887,23 @@
                             sDetail = line;
                         }
 
-                        // ถ้า sDate ไม่ใช่รูปแบบ YYYY-MM-DD (เช่นเป็นข้อความธรรมดา) ให้เอาไปรวมเป็นรายละเอียด
                         if (sDate && !/^\d{4}-\d{2}-\d{2}$/.test(sDate)) {
                             sDetail = sDetail ? `${sDate} : ${sDetail}` : sDate;
                             sDate = '';
                         }
 
+                        // แกะป้ายประเภท [OR] / [REOP] / [PROC]
+                        let sType = 'OR';
+                        const tagMatch = sDetail.match(/^\[(OR|REOP|PROC)\]\s*/i);
+                        if (tagMatch) {
+                            sType = tagMatch[1].toUpperCase();
+                            sDetail = sDetail.replace(/^\[(OR|REOP|PROC)\]\s*/i, '').trim();
+                        } else if (nonOrRegex.test(sDetail)) {
+                            sType = 'PROC';
+                        }
+
                         if (sDate || sDetail) {
-                            addSurgeryRow(sDate, sDetail);
+                            addSurgeryRow(sDate, sDetail, sType);
                             hasValidSurgery = true;
                         }
                     });
@@ -1316,20 +1326,27 @@
         container.insertAdjacentHTML('beforeend', html);
     }
 
-    function addSurgeryRow(defaultDate = '', defaultDetail = '') {
+    function addSurgeryRow(defaultDate = '', defaultDetail = '', defaultType = 'OR') {
         const container = document.getElementById('surgery-container');
         const uniqueId = Date.now() + Math.random().toString(36).substr(2, 5);
         
-        // จุดสำคัญ: ต้องแทรก ${defaultDetail} ไว้ระหว่างเปิด-ปิดแท็ก <textarea>...</textarea>
         const html = `
-        <div class="row g-3 align-items-start mb-3 pb-3 border-bottom surg-entry" id="surg-row-${uniqueId}">
-            <div class="col-md-3">
-                <label class="form-label text-primary">วันที่ผ่าตัด</label>
-                <input type="date" class="form-control surg-date" value="${defaultDate}">
+        <div class="row g-2 align-items-start mb-3 pb-3 border-bottom surg-entry" id="surg-row-${uniqueId}">
+            <div class="col-md-2">
+                <label class="form-label text-primary small fw-bold">วันที่ผ่าตัด</label>
+                <input type="date" class="form-control form-control-sm surg-date" value="${defaultDate}">
             </div>
-            <div class="col-md-7">
-                <label class="form-label text-primary">การผ่าตัดที่ได้รับ</label>
-                <textarea class="form-control surg-detail" id="surg-text-${uniqueId}" rows="2">${defaultDetail}</textarea>
+            <div class="col-md-3">
+                <label class="form-label text-primary small fw-bold">ประเภท</label>
+                <select class="form-select form-select-sm surg-type">
+                    <option value="OR" ${defaultType === 'OR' ? 'selected' : ''}>ผ่าตัด (OR)</option>
+                    <option value="REOP" ${defaultType === 'REOP' ? 'selected' : ''}>ผ่าตัดซ้ำ (Re-op)</option>
+                    <option value="PROC" ${defaultType === 'PROC' ? 'selected' : ''}>หัตถการ (ไม่นับ OR)</option>
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label text-primary small fw-bold">การผ่าตัด / หัตถการที่ได้รับ</label>
+                <textarea class="form-control form-control-sm surg-detail" id="surg-text-${uniqueId}" rows="2">${defaultDetail}</textarea>
             </div>
             <div class="col-md-2 text-end d-flex flex-column gap-2 mt-4">
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="triggerScan('surg-text-${uniqueId}')">📷 สแกนภาพ</button>
@@ -1351,8 +1368,10 @@
         
         let surgeries = [];
         document.querySelectorAll('#surgery-container .surg-entry').forEach(row => {
-            let date = row.querySelector('.surg-date').value, detail = row.querySelector('.surg-detail').value;
-            if(date || detail) surgeries.push(`${date} : ${detail}`);
+            let date = row.querySelector('.surg-date').value;
+            let type = row.querySelector('.surg-type') ? row.querySelector('.surg-type').value : 'OR';
+            let detail = row.querySelector('.surg-detail').value.trim();
+            if (date || detail) surgeries.push(`${date} : [${type}] ${detail}`);
         });
 
         let deviceRecords = { ett: [], vent: [], foley: [], cline: [], piv: [] };
@@ -1425,7 +1444,7 @@
             sepsis_source: document.getElementById('sepsisSourceDetail').value, icu_reason: document.getElementById('icuReason').value, doctor_owner: document.getElementById('docOwner').value, doctor_support: document.getElementById('docSupport').value,
             triss_score: document.getElementById('outTRISS').innerText, apache_score: document.getElementById('outAPACHE').innerText, score_raw_data: JSON.stringify(scoreRawData), surgery: surgeries.join('\n'), device_records: JSON.stringify(deviceRecords),
             complication: comps.join(', '), 
-            status: dStatus ? dStatus : 'กำลังรักษา (In ICU)', discharge_date: document.getElementById('icuOutDate').value || null, destination: document.getElementById('destinationDetail').value
+            status: dStatus ? dStatus : 'กำลังรักษา (In ICU)', discharge_date: document.getElementById('icuOutDate').value || null, destination: document.getElementById('destinationDetail').value,
             icu_in_time: document.getElementById('icuInTime').value || null,
             discharge_time: document.getElementById('icuOutTime').value || null,
             relative_name: document.getElementById('relativeName').value.trim(),

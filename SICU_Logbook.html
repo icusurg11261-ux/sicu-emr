@@ -100,6 +100,8 @@
             <span class="badge bg-light text-dark border">Cath: <strong id="sumCath">0</strong></span>
             <span class="badge bg-light text-dark border">IV: <strong id="sumIv">0</strong></span>
             <span class="badge bg-light text-dark border">C-Line: <strong id="sumCline">0</strong></span>
+            <span class="badge border" style="background:#fff4e6; color:#c2410c; border-color:#fdba74 !important;">ผ่าตัด OR ใน ICU: <strong id="sumSurgery">0</strong> ครั้ง</span>
+            <span class="badge border" style="background:#ffe3e3; color:#c92a2a; border-color:#ffa8a8 !important;">Re-op: <strong id="sumReop">0</strong> ครั้ง (<span id="sumReopRate">0.00</span>%)</span>            
         </div>
     </div>
 
@@ -387,6 +389,110 @@
         return `<span class="text-danger fw-bold">${fil}</span> <small class="text-muted">(รวม ${tot})</small>`;
     };
 
+    // ใช้ช่วยแยกเฉพาะเคสเก่าที่ยังไม่ได้เลือก Dropdown
+    const NON_OR_KEYWORDS = /\b(at\s*er|at\s*sicu\d*|at\s*icu|bedside|egd|colonoscop\w*|bronchoscop\w*|gastroscop\w*|suture\s*wound|on\s+(?:(?:right|left|rt\.?|lt\.?)\s+)?icd)\b/i;
+
+    function evaluatePatientSurgeries(p, fStart, fEnd, hasDateFilter) {
+        if (!p.surgery || !p.surgery.trim()) {
+            return { html: '-', totalInIcu: 0, filteredInIcu: 0, totalReopInIcu: 0, filteredReopInIcu: 0 };
+        }
+
+        const pIn = parseLocalDate(p.icu_in_date);
+        const pOut = p.discharge_date ? parseLocalDate(p.discharge_date) : new Date();
+        if (pIn) pIn.setHours(0, 0, 0, 0);
+        if (pOut) pOut.setHours(23, 59, 59, 999);
+
+        // อนุโลมผ่าตัดก่อนเข้า ICU 1 วัน เฉพาะเคสที่รับหลังผ่าตัด (OR) เผื่อผ่าดึกข้ามเที่ยงคืน
+        const isPostOpAdmit = (p.adm_type || '').includes('OR') || (p.adm_type || '').includes('หลังผ่าตัด');
+        let icuStartAllow = pIn ? new Date(pIn) : null;
+        if (icuStartAllow && isPostOpAdmit) {
+            icuStartAllow.setDate(icuStartAllow.getDate() - 1);
+        }
+
+        let totalInIcu = 0, filteredInIcu = 0;
+        let totalReopInIcu = 0, filteredReopInIcu = 0;
+
+        const lines = p.surgery.split(/\r?\n/).filter(line => line.trim() !== '');
+        const formattedLines = lines.map(line => {
+            const colonIdx = line.indexOf(':');
+            let rawDate = '', detail = '';
+            if (colonIdx !== -1) {
+                rawDate = line.substring(0, colonIdx).trim();
+                detail = line.substring(colonIdx + 1).trim();
+            } else {
+                detail = line.trim();
+            }
+
+            // แกะป้ายประเภท [OR] / [REOP] / [PROC]
+            let sType = '';
+            const tagMatch = detail.match(/^\[(OR|REOP|PROC)\]\s*/i);
+            if (tagMatch) {
+                sType = tagMatch[1].toUpperCase();
+                detail = detail.replace(/^\[(OR|REOP|PROC)\]\s*/i, '').trim();
+            } else {
+                sType = NON_OR_KEYWORDS.test(detail) ? 'PROC' : 'OR';
+            }
+
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+                return `<span style="color:#212529;">${detail || line.trim()}</span>`;
+            }
+
+            const surgDate = parseLocalDate(rawDate);
+            surgDate.setHours(12, 0, 0, 0);
+            const thaiDate = formatDateThai(rawDate);
+
+            const isInIcuStay = Boolean(icuStartAllow && surgDate >= icuStartAllow && surgDate <= pOut);
+            const isInFilterPeriod = !hasDateFilter || ((!fStart || surgDate >= fStart) && (!fEnd || surgDate <= fEnd));
+
+            let dateColor = '#6c757d';
+            let tip = '';
+            let badgeHtml = '';
+
+            if (sType === 'PROC') {
+                tip = 'หัตถการ (ไม่นับเข้าฐาน OR)';
+                badgeHtml = `<span style="background:#e9ecef; color:#495057; padding:1px 4px; border-radius:3px; font-size:0.65rem; font-weight:bold; margin-right:3px;">หัตถการ</span>`;
+            } else if (!isInIcuStay) {
+                tip = 'ไม่นับเป็นฐาน ICU (ผ่าตัดก่อนเข้าหรือหลังออก ICU)';
+                badgeHtml = sType === 'REOP'
+                    ? `<span style="background:#f8d7da; color:#842029; padding:1px 4px; border-radius:3px; font-size:0.65rem; font-weight:bold; margin-right:3px;">Re-op</span>`
+                    : '';
+            } else {
+                totalInIcu++;
+                if (sType === 'REOP') totalReopInIcu++;
+
+                if (isInFilterPeriod) {
+                    filteredInIcu++;
+                    if (sType === 'REOP') {
+                        filteredReopInIcu++;
+                        dateColor = '#c92a2a'; // แดงเข้ม = Re-op ในช่วงที่ค้น
+                        tip = 'นับเข้ายอด Re-operation และฐาน OR (ช่วงที่ค้น)';
+                        badgeHtml = `<span style="background:#dc3545; color:#fff; padding:1px 4px; border-radius:3px; font-size:0.65rem; font-weight:bold; margin-right:3px;">Re-op</span>`;
+                    } else {
+                        dateColor = '#c2410c'; // ส้มเข้ม = OR ในช่วงที่ค้น
+                        tip = 'นับเข้าฐานผ่าตัด OR ใน ICU (ช่วงที่ค้น)';
+                        badgeHtml = `<span style="background:#fff4e6; color:#c2410c; border:1px solid #fdba74; padding:0px 4px; border-radius:3px; font-size:0.65rem; font-weight:bold; margin-right:3px;">OR</span>`;
+                    }
+                } else {
+                    dateColor = '#0d6efd'; // น้ำเงิน = ผ่าตัดใน ICU แต่นอกเดือนที่กรอง
+                    tip = 'ผ่าตัด OR ใน ICU (อยู่นอกช่วงเดือนที่กรอง)';
+                    badgeHtml = sType === 'REOP'
+                        ? `<span style="background:#f8d7da; color:#842029; padding:1px 4px; border-radius:3px; font-size:0.65rem; font-weight:bold; margin-right:3px;">Re-op</span>`
+                        : `<span style="background:#e7f1ff; color:#0d6efd; padding:0px 4px; border-radius:3px; font-size:0.65rem; font-weight:bold; margin-right:3px;">OR</span>`;
+                }
+            }
+
+            return `<span style="color:${dateColor}; font-weight:700;" title="${tip}">${thaiDate}</span> : ${badgeHtml}<span style="color:#212529;">${detail}</span>`;
+        });
+
+        return {
+            html: formattedLines.length > 0 ? formattedLines.join('<br>') : '-',
+            totalInIcu,
+            filteredInIcu,
+            totalReopInIcu,
+            filteredReopInIcu
+        };
+    }
+
     function renderTable(data, fStart, fEnd, hasDateFilter, isSingleMonth) {
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
@@ -397,11 +503,11 @@
 
         let carryOverCount = 0;
         let sumLosFiltered = 0;
-        let sumEtt = 0, sumVent = 0, sumCath = 0, sumIv = 0, sumCline = 0;
+        let sumEtt = 0, sumVent = 0, sumCath = 0, sumIv = 0, sumCline = 0, sumSurgery = 0, sumReop = 0;
 
         if (data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="10" class="text-center text-secondary py-4">ไม่พบข้อมูลผู้ป่วยตามเงื่อนไขที่เลือก</td></tr>';
-            updateSummaryBar(0, 0, 0, 0, 0, 0, 0, 0);
+            updateSummaryBar(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
             return;
         }
 
@@ -435,6 +541,11 @@
             sumCath += foleyFiltered;
             sumIv += pivFiltered;
             sumCline += clineFiltered;
+
+            const surgInfo = evaluatePatientSurgeries(p, fStart, fEnd, hasDateFilter);
+            const surgeryDisplay = surgInfo.html;
+            sumSurgery += surgInfo.filteredInIcu;
+            sumReop += surgInfo.filteredReopInIcu;
 
             const carryOverBadge = isCarryOver ? `<span class="badge-carryover">📌 ยอดยกมา</span><br>` : '';
 
@@ -484,16 +595,6 @@
                 </span>
             `;
 
-            let surgeryDisplay = '-';
-            if (p.surgery) {
-                surgeryDisplay = p.surgery.split('\n').map(s => {
-                    let parts = s.split(' : ');
-                    if(parts[0]) parts[0] = formatDateThai(parts[0]);
-                    return parts.join(' : ');
-                }).join('<br>');
-            }
-
-            // เก็บข้อมูลสำหรับ Export Excel ตามช่วงเวลาและกลุ่มโรคที่กรอง
             currentExportRows.push({
                 'ลำดับ': index + 1,
                 'สถานะในงวด': isCarryOver ? 'ยอดยกมา' : 'รับใหม่ในงวด',
@@ -511,6 +612,9 @@
                 'Cath (ช่วงที่ค้น)': foleyFiltered,
                 'IV (ช่วงที่ค้น)': pivFiltered,
                 'C-Line (ช่วงที่ค้น)': clineFiltered,
+                'ผ่าตัด OR ใน ICU (ช่วงที่ค้น)': surgInfo.filteredInIcu,
+                'Re-op ใน ICU (ช่วงที่ค้น)': surgInfo.filteredReopInIcu,
+                'ผ่าตัด OR ใน ICU (รวมตลอดนอน)': surgInfo.totalInIcu,
                 'ประเภทรับเข้า': p.adm_type || '',
                 'รับจาก': p.adm_from || '',
                 'สถานะจำหน่าย': p.status || '',
@@ -541,10 +645,10 @@
             tbody.insertAdjacentHTML('beforeend', row);
         });
 
-        updateSummaryBar(data.length, carryOverCount, sumLosFiltered, sumEtt, sumVent, sumCath, sumIv, sumCline);
+        updateSummaryBar(data.length, carryOverCount, sumLosFiltered, sumEtt, sumVent, sumCath, sumIv, sumCline, sumSurgery, sumReop);
     }
 
-    function updateSummaryBar(total, carryOver, losFiltered, ett, vent, cath, iv, cline) {
+    function updateSummaryBar(total, carryOver, losFiltered, ett, vent, cath, iv, cline, surgeryCount = 0, reopCount = 0) {
         document.getElementById('sumTotalPatients').innerText = total.toLocaleString();
         document.getElementById('sumCarryOver').innerText = carryOver.toLocaleString();
         document.getElementById('sumNewAdmit').innerText = (total - carryOver).toLocaleString();
@@ -554,6 +658,16 @@
         document.getElementById('sumCath').innerText = cath.toLocaleString();
         document.getElementById('sumIv').innerText = iv.toLocaleString();
         document.getElementById('sumCline').innerText = cline.toLocaleString();
+
+        const surgEl = document.getElementById('sumSurgery');
+        if (surgEl) surgEl.innerText = surgeryCount.toLocaleString();
+
+        const reopEl = document.getElementById('sumReop');
+        const reopRateEl = document.getElementById('sumReopRate');
+        if (reopEl) reopEl.innerText = reopCount.toLocaleString();
+        if (reopRateEl) {
+            reopRateEl.innerText = surgeryCount > 0 ? ((reopCount * 100) / surgeryCount).toFixed(2) : '0.00';
+        }
     }
 
     function exportExcel() {
